@@ -1,0 +1,2045 @@
+{
+  "info": {
+    "_postman_id": "60a6075d-9d0a-41d6-83b3-649682dffd3b",
+    "name": "IONET-2.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "53236318",
+    "_collection_link": "https://go.postman.co/collection/53236318-60a6075d-9d0a-41d6-83b3-649682dffd3b?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "User Auth",
+      "item": [
+        {
+          "name": "Request OTP",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\" : \"rohan194061@gmail.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{dev}}/api/v1/auth/request-otp",
+              "host": [
+                "{{dev}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "request-otp"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Verify OTP",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\" : \"rohan194061@gmail.com\",\n    \"otp\": \"706454\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{dev}}/api/v1/auth/verify-otp",
+              "host": [
+                "{{dev}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "verify-otp"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Profile",
+      "item": [
+        {
+          "name": "Get User Profile",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{json_web_token_09kk}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{dev}}/api/v1/users/me",
+              "host": [
+                "{{dev}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create User Profile",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_secret_09kk}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Rohan Chaudhari\",\n    \"phoneNumber\": \"9876543210\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{dev}}/api/v1/users/profile",
+              "host": [
+                "{{dev}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "profile"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Edit Profile",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{json_web_token_09kk}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"why not\",\n    \"phoneNumber\": \"9876543210\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{dev}}/api/v1/users/profile",
+              "host": [
+                "{{dev}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "profile"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Upload Profile Picture",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_secret_09kk}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "uuid": "c3aa2ef8-b6b6-4d98-b7fa-3034611baa43",
+                  "src": "/Users/cdg_jayesh/Downloads/Test02.png"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{dev}}/api/v1/users/profile-picture",
+              "host": [
+                "{{dev}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "profile-picture"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Profile Picture",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_secret_09kk}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{dev}}/api/v1/users/profile-picture",
+              "host": [
+                "{{dev}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "profile-picture"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Deactivate User Account(Delete User Account)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_secret_09kk}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{dev}}/api/v1/users/me",
+              "host": [
+                "{{dev}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Search User By Email or Name",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_secret_09kk}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{dev}}/api/v1/users/search?query=roh",
+              "host": [
+                "{{dev}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "roh"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Devices",
+      "item": [
+        {
+          "name": "Get Devices",
+          "item": [
+            {
+              "name": "Get All Devices",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{auth_secret_09kk}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{dev}}/api/v1/devices",
+                  "host": [
+                    "{{dev}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "devices"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Only Owned Devices",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{auth_secret_09kk}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{dev}}/api/v1/devices?type=OWNER",
+                  "host": [
+                    "{{dev}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "devices"
+                  ],
+                  "query": [
+                    {
+                      "key": "type",
+                      "value": "OWNER"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Only Shared Devices",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{auth_secret_09kk}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{dev}}/api/v1/devices?type=SHARED",
+                  "host": [
+                    "{{dev}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "devices"
+                  ],
+                  "query": [
+                    {
+                      "key": "type",
+                      "value": "SHARED"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Device By ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{auth_secret_09kk}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{dev}}/api/v1/devices/{{deviceId}}",
+                  "host": [
+                    "{{dev}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "devices",
+                    "{{deviceId}}"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Device Image",
+          "item": [
+            {
+              "name": "Add Device Image",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{auth_secret_09kk}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "uuid": "3f6c5744-1347-49b3-a8e4-744781659589",
+                      "src": "/Users/cdg_jayesh/Downloads/Maha02.png"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{dev}}/api/v1/devices/IONET001/image",
+                  "host": [
+                    "{{dev}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "devices",
+                    "IONET001",
+                    "image"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Device Image",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{auth_secret_09kk}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{dev}}/api/v1/devices/IONET001/image",
+                  "host": [
+                    "{{dev}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "devices",
+                    "IONET001",
+                    "image"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Share Device",
+          "item": [
+            {
+              "name": "Share Device",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{auth_secret_09kk}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"userId\": \"6a61a0490664d3fb65d923ab\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{dev}}/api/v1/devices/IONET001/share",
+                  "host": [
+                    "{{dev}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "devices",
+                    "IONET001",
+                    "share"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Unshare Device",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{auth_secret_09kk}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{dev}}/api/v1/devices/{{deviceId}}/share/{{userId}}",
+                  "host": [
+                    "{{dev}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "devices",
+                    "{{deviceId}}",
+                    "share",
+                    "{{userId}}"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Unshare device by shared User",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{json_web_token_09kk}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{dev}}/api/v1/devices/6a60accc0664d3fb65d9238e/share",
+                  "host": [
+                    "{{dev}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "devices",
+                    "6a60accc0664d3fb65d9238e",
+                    "share"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Create Device",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_secret_09kk}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"deviceId\": \"IONET002\",\n    \"deviceName\": \"Living Room Camera\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{dev}}/api/v1/devices",
+              "host": [
+                "{{dev}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Name of Device",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_secret_09kk}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"deviceName\": \"Kitchen Camera\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{dev}}/api/v1/devices/{{deviceId}}",
+              "host": [
+                "{{dev}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices",
+                "{{deviceId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Owned Device",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_secret_09kk}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{dev}}/api/v1/devices/{{deviceId}}",
+              "host": [
+                "{{dev}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "devices",
+                "{{deviceId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Websocket",
+      "item": []
+    },
+    {
+      "name": "Updates",
+      "item": [
+        {
+          "name": "Create Updates",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_secret_09kk}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "title",
+                  "type": "text",
+                  "uuid": "3077c4c0-5eb3-45d0-b085-7d679a65f6b7",
+                  "value": "IOnet"
+                },
+                {
+                  "key": "description",
+                  "value": "Industrial IOT",
+                  "type": "text",
+                  "uuid": "6135ce43-400f-4ddf-b7bc-35925a168842"
+                },
+                {
+                  "key": "files",
+                  "type": "file",
+                  "uuid": "faca3157-b9dd-4105-b74b-88fe20ef5015",
+                  "value": null
+                },
+                {
+                  "key": "files",
+                  "type": "file",
+                  "uuid": "ee88e355-b480-4bdb-a8a2-1d178a5a00f7",
+                  "value": null
+                },
+                {
+                  "key": "files",
+                  "value": "",
+                  "type": "text",
+                  "uuid": "de5db60f-c27e-407a-a703-47e94d0feca9"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{dev}}/api/v1/updates",
+              "host": [
+                "{{dev}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "updates"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Updates",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{dev}}/api/v1/updates",
+              "host": [
+                "{{dev}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "updates"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Updates",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_secret_09kk}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{dev}}/api/v1/updates/{id}",
+              "host": [
+                "{{dev}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "updates",
+                "{id}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Get Users",
+          "item": [
+            {
+              "name": "Get All Users",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{admin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{dev}}/api/v1/admin/users",
+                  "host": [
+                    "{{dev}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "admin",
+                    "users"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Users based on Pagination",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{admin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{dev}}/api/v1/admin/users?page=0&size=20",
+                  "host": [
+                    "{{dev}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "admin",
+                    "users"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "0"
+                    },
+                    {
+                      "key": "size",
+                      "value": "20"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get User By Searching",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{admin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{dev}}/api/v1/admin/users?search=rohan",
+                  "host": [
+                    "{{dev}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "admin",
+                    "users"
+                  ],
+                  "query": [
+                    {
+                      "key": "search",
+                      "value": "rohan"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get User by Role",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{admin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{dev}}/api/v1/admin/users?role=ADMIN",
+                  "host": [
+                    "{{dev}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "admin",
+                    "users"
+                  ],
+                  "query": [
+                    {
+                      "key": "role",
+                      "value": "ADMIN"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get User By Combined Filter",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{admin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{dev}}/api/v1/admin/users?page=0&size=20&search=rohan&role=ADMIN&status=ACTIVE",
+                  "host": [
+                    "{{dev}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "admin",
+                    "users"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "0"
+                    },
+                    {
+                      "key": "size",
+                      "value": "20"
+                    },
+                    {
+                      "key": "search",
+                      "value": "rohan"
+                    },
+                    {
+                      "key": "role",
+                      "value": "ADMIN"
+                    },
+                    {
+                      "key": "status",
+                      "value": "ACTIVE"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get User by Status",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{admin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{dev}}/api/v1/admin/users?status=ACTIVE",
+                  "host": [
+                    "{{dev}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "admin",
+                    "users"
+                  ],
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "ACTIVE"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get user by ID",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{admin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{dev}}/api/v1/admin/users/{{userID}}",
+                  "host": [
+                    "{{dev}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "admin",
+                    "users",
+                    "{{userID}}"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Deleted Users",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{admin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{dev}}/api/v1/admin/users?deleted=true",
+                  "host": [
+                    "{{dev}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "admin",
+                    "users"
+                  ],
+                  "query": [
+                    {
+                      "key": "deleted",
+                      "value": "true"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Devices",
+          "item": [
+            {
+              "name": "Get Devices",
+              "item": [
+                {
+                  "name": "Get All Devices",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{admin}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [],
+                    "url": {
+                      "raw": "{{dev}}/api/v1/admin/devices",
+                      "host": [
+                        "{{dev}}"
+                      ],
+                      "path": [
+                        "api",
+                        "v1",
+                        "admin",
+                        "devices"
+                      ]
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Get Devices By Searching Device Name",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{admin}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [],
+                    "url": {
+                      "raw": "{{dev}}/api/v1/admin/devices?search=Living",
+                      "host": [
+                        "{{dev}}"
+                      ],
+                      "path": [
+                        "api",
+                        "v1",
+                        "admin",
+                        "devices"
+                      ],
+                      "query": [
+                        {
+                          "key": "search",
+                          "value": "Living"
+                        }
+                      ]
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Get Devices By Pagination",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{admin}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [],
+                    "url": {
+                      "raw": "{{dev}}/api/v1/admin/devices?page=0&size=20",
+                      "host": [
+                        "{{dev}}"
+                      ],
+                      "path": [
+                        "api",
+                        "v1",
+                        "admin",
+                        "devices"
+                      ],
+                      "query": [
+                        {
+                          "key": "page",
+                          "value": "0"
+                        },
+                        {
+                          "key": "size",
+                          "value": "20"
+                        }
+                      ]
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Get Devices By Owner ID",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{admin}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [],
+                    "url": {
+                      "raw": "{{dev}}/api/v1/admin/devices?ownerId=6a604fcc935f6a7ffa59937e",
+                      "host": [
+                        "{{dev}}"
+                      ],
+                      "path": [
+                        "api",
+                        "v1",
+                        "admin",
+                        "devices"
+                      ],
+                      "query": [
+                        {
+                          "key": "ownerId",
+                          "value": "6a604fcc935f6a7ffa59937e"
+                        }
+                      ]
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Get Device By Device id",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{admin}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [],
+                    "url": {
+                      "raw": "{{dev}}/api/v1/admin/devices/6a60accc0664d3fb65d9238e",
+                      "host": [
+                        "{{dev}}"
+                      ],
+                      "path": [
+                        "api",
+                        "v1",
+                        "admin",
+                        "devices",
+                        "6a60accc0664d3fb65d9238e"
+                      ]
+                    }
+                  },
+                  "response": []
+                }
+              ]
+            },
+            {
+              "name": "Share Device",
+              "item": [
+                {
+                  "name": "Share Device",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{admin}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "PATCH",
+                    "header": [],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n    \"userId\": \"6a604fcc935f6a7ffa59937e\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{dev}}/api/v1/admin/devices/{deviceId}/share",
+                      "host": [
+                        "{{dev}}"
+                      ],
+                      "path": [
+                        "api",
+                        "v1",
+                        "admin",
+                        "devices",
+                        "{deviceId}",
+                        "share"
+                      ]
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Unshare Device",
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{admin}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "PATCH",
+                    "header": [],
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n    \"userId\": \"6a61a0490664d3fb65d923ab\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    },
+                    "url": {
+                      "raw": "{{dev}}/api/v1/admin/devices/6a60accc0664d3fb65d9238e/unshare",
+                      "host": [
+                        "{{dev}}"
+                      ],
+                      "path": [
+                        "api",
+                        "v1",
+                        "admin",
+                        "devices",
+                        "6a60accc0664d3fb65d9238e",
+                        "unshare"
+                      ]
+                    }
+                  },
+                  "response": []
+                }
+              ]
+            },
+            {
+              "name": "Update Device Name",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{admin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"deviceName\": \"Smart Water Pump\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{dev}}/api/v1/admin/devices/6a60accc0664d3fb65d9238e",
+                  "host": [
+                    "{{dev}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "admin",
+                    "devices",
+                    "6a60accc0664d3fb65d9238e"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Change Owner of the Device",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{admin}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PATCH",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"ownerId\": \"6a61a0490664d3fb65d923ab\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{dev}}/api/v1/admin/devices/{deviceID}/owner",
+                  "host": [
+                    "{{dev}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "admin",
+                    "devices",
+                    "{deviceID}",
+                    "owner"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Admin Auth",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"admin@ionet.com\",\n    \"password\": \"admin@1234\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{dev}}/api/v1/auth/admin/login",
+              "host": [
+                "{{dev}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "admin",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Set Status of User",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"status\": \"INACTIVE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{dev}}/api/v1/admin/users/{{userID}}/status",
+              "host": [
+                "{{dev}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                "{{userID}}",
+                "status"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update User Data",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"phoneNumber\": \"+919876543210\",\n  \"role\": \"USER\",\n  \"creditPoints\": 100,\n  \"status\": \"ACTIVE\",\n  \"profilePicture\": null,\n  \"maxOwnedDevices\": 15,\n  \"maxSharedDevices\": 20\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{dev}}/api/v1/admin/users/6a604fcc935f6a7ffa59937e",
+              "host": [
+                "{{dev}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                "6a604fcc935f6a7ffa59937e"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete User By ID",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{dev}}/api/v1/admin/users/6a61a0490664d3fb65d923ab",
+              "host": [
+                "{{dev}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                "6a61a0490664d3fb65d923ab"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Restore Deleted User",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{dev}}/api/v1/admin/users/6a61a0490664d3fb65d923ab/restore",
+              "host": [
+                "{{dev}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                "6a61a0490664d3fb65d923ab",
+                "restore"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Channel",
+      "item": [
+        {
+          "name": "Create Channel",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"channelName\": \"ESP32\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{dev}}/api/v1/admin/channels",
+              "host": [
+                "{{dev}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "channels"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get all Channels",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{dev}}/api/v1/channels",
+              "host": [
+                "{{dev}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "channels"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Channel By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{dev}}/api/v1/channels/6a632f7689cbfebcdd8604d4",
+              "host": [
+                "{{dev}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "channels",
+                "6a632f7689cbfebcdd8604d4"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Add Topic to Channel By Channel ID",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"topicName\":\"GPIO\",\n    \"link\":\"https://youtube.com/watch?v=123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{dev}}/api/v1/admin/channels/6a632f7689cbfebcdd8604d4/topics",
+              "host": [
+                "{{dev}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "channels",
+                "6a632f7689cbfebcdd8604d4",
+                "topics"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update topics from channel",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"topicName\": \"GPIO Advanced\",\n    \"link\": \"https://youtube.com/watch?v=xyz\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{dev}}/api/v1/admin/channels/{channel_id}/topics/{topic_id}",
+              "host": [
+                "{{dev}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "channels",
+                "{channel_id}",
+                "topics",
+                "{topic_id}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Channel Name",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"channelName\": \"ESP32 Programming\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{dev}}/api/v1/admin/channels/6a632f7689cbfebcdd8604d4",
+              "host": [
+                "{{dev}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "channels",
+                "6a632f7689cbfebcdd8604d4"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Topic from Channel",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{dev}}/api/v1/admin/channels/6a632f7689cbfebcdd8604d4/topics/5e693887-1e43-49e6-8b0a-796f901991f2",
+              "host": [
+                "{{dev}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "channels",
+                "6a632f7689cbfebcdd8604d4",
+                "topics",
+                "5e693887-1e43-49e6-8b0a-796f901991f2"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Channel",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{admin}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{dev}}/api/v1/admin/channels/6a632f7689cbfebcdd8604d4",
+              "host": [
+                "{{dev}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "channels",
+                "6a632f7689cbfebcdd8604d4"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Health Check",
+      "item": [
+        {
+          "name": "Is Alive",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{dev}}/api/v1/isalive",
+              "host": [
+                "{{dev}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "isalive"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "auth_secret_09kk",
+      "secret": true,
+      "source": {
+        "provider": "postman",
+        "postman": {
+          "type": "cloud",
+          "secretId": "618c5a58-0325-4524-af11-c7d41f11f2cd",
+          "vaultId": "5a536560-b85b-40d7-894d-ab3ddc3603e7"
+        }
+      }
+    },
+    {
+      "key": "json_web_token_09kk",
+      "secret": true,
+      "source": {
+        "provider": "postman",
+        "postman": {
+          "type": "cloud",
+          "secretId": "c5991ccc-230b-49c0-bd35-b5875a2948df",
+          "vaultId": "5a536560-b85b-40d7-894d-ab3ddc3603e7"
+        }
+      }
+    },
+    {
+      "key": "admin",
+      "secret": true,
+      "source": {
+        "provider": "postman",
+        "postman": {
+          "type": "cloud",
+          "secretId": "d2f2ce57-0466-4d4f-98a6-97fe364faff9",
+          "vaultId": "5a536560-b85b-40d7-894d-ab3ddc3603e7"
+        }
+      }
+    }
+  ]
+}
