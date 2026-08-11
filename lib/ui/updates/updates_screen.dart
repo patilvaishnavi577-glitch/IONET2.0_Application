@@ -473,7 +473,7 @@ class _UpdatesScreenState extends State<UpdatesScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'My Status',
+                              'My Updates',
                               style: theme.textTheme.titleMedium?.copyWith(
                                 fontWeight: FontWeight.bold,
                               ),
@@ -1067,28 +1067,7 @@ class _StatusStoryViewerState extends State<StatusStoryViewer> with SingleTicker
               ),
             ),
 
-          // Bottom caption bar
-          Positioned(
-            bottom: 40,
-            left: 16,
-            right: 16,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.65),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                story.text,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ),
+
         ],
       );
     }

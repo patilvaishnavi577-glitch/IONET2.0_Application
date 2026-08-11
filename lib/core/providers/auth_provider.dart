@@ -15,6 +15,7 @@ class AuthProvider extends ChangeNotifier {
   int _credits = 50;
   String? _token;
   String? _profilePicture;
+  String? _userId;
 
   bool get isAuthenticated => _isAuthenticated;
   bool get isFirstTimeUser => _isFirstTimeUser;
@@ -24,6 +25,7 @@ class AuthProvider extends ChangeNotifier {
   int get credits => _credits;
   String? get token => _token;
   String? get profilePicture => _profilePicture;
+  String? get userId => _userId;
 
   // Logging wrapper for POST requests
   Future<http.Response> _post(String path, {Map<String, String>? headers, Object? body}) async {
@@ -195,6 +197,7 @@ class AuthProvider extends ChangeNotifier {
         }
       }
 
+      _userId = profile['id'] as String? ?? profile['_id'] as String?;
       _email = profile['email'] as String? ?? _email;
       _name = profile['name'] as String?;
       _mobile = profile['phoneNumber'] as String?;
@@ -394,6 +397,7 @@ class AuthProvider extends ChangeNotifier {
     _name = null;
     _mobile = null;
     _credits = 50;
+    _userId = null;
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('jwt_token');

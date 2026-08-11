@@ -16,6 +16,7 @@ class DeviceProvider extends ChangeNotifier {
   final Map<String, List<MessageModel>> _messages = {};
   bool _isLoading = false;
   WebSocket? _webSocket;
+  StreamSubscription? _wsSubscription;
 
   final Map<String, String> _deviceConnectionStatus = {};
   final Map<String, String> _deviceLastSeenIST = {};
@@ -30,19 +31,7 @@ class DeviceProvider extends ChangeNotifier {
   final Map<String, List<QuickCommandModel>> _customQuickCommands = {};
   
   List<QuickCommandModel> getQuickCommands(String deviceId) {
-    final serverCmds = _deviceQuickCommands[deviceId] ?? [
-      QuickCommandModel(label: 'Status', message: '/status'),
-    ];
-    final customCmds = _customQuickCommands[deviceId] ?? [];
-
-    // Merge both lists, avoiding duplicate command messages
-    final List<QuickCommandModel> merged = [...serverCmds];
-    for (var c in customCmds) {
-      if (!merged.any((item) => item.message == c.message)) {
-        merged.add(c);
-      }
-    }
-    return merged;
+    return _customQuickCommands[deviceId] ?? [];
   }
 
   bool isCustomCommand(String deviceId, QuickCommandModel command) {
@@ -109,6 +98,28 @@ class DeviceProvider extends ChangeNotifier {
         await prefs.setStringList('custom_commands_$deviceId', listJson);
       } catch (e) {
         debugPrint('Error deleting custom command: $e');
+      }
+    }
+  }
+
+  Future<void> editDeviceQuickCommand(String deviceId, QuickCommandModel oldCommand, QuickCommandModel newCommand) async {
+    if (_customQuickCommands.containsKey(deviceId)) {
+      final list = _customQuickCommands[deviceId]!;
+      final index = list.indexWhere((c) => c.message == oldCommand.message && c.label == oldCommand.label);
+      if (index != -1) {
+        list[index] = newCommand;
+        notifyListeners();
+
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          final listJson = list.map((c) => jsonEncode({
+            'label': c.label,
+            'message': c.message,
+          })).toList();
+          await prefs.setStringList('custom_commands_$deviceId', listJson);
+        } catch (e) {
+          debugPrint('Error editing custom command: $e');
+        }
       }
     }
   }
@@ -269,7 +280,7 @@ class DeviceProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> deleteDevice(String id) async {
+  Future<void> deleteDevice(String id, {String? userId}) async {
     final token = await _getToken();
     if (token == null) throw Exception('Not authenticated');
 
@@ -278,14 +289,36 @@ class DeviceProvider extends ChangeNotifier {
 
     final device = _devices.firstWhere(
       (d) => d.id == id,
-      orElse: () => DeviceModel(id: id, name: '', profilePhotoUrl: '', lastMessage: '', timestamp: DateTime.now(), isOwner: false),
+      orElse: () => DeviceModel(id: id, mongoId: '', name: '', profilePhotoUrl: '', lastMessage: '', timestamp: DateTime.now(), isOwner: false),
     );
 
-    final url = device.isOwner
-        ? '${ApiConfig.baseUrl}/api/v1/devices/$id'
-        : '${ApiConfig.baseUrl}/api/v1/devices/$id/share';
-
     try {
+      String url;
+      if (device.isOwner) {
+        url = '${ApiConfig.baseUrl}/api/v1/devices/$id';
+      } else {
+        // For shared devices, fetch the device by ID first to get the correct mongoId
+        final getDeviceResponse = await http.get(
+          Uri.parse('${ApiConfig.baseUrl}/api/v1/devices/$id'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+        );
+
+        if (getDeviceResponse.statusCode == 200) {
+          final decoded = jsonDecode(getDeviceResponse.body);
+          if (decoded['success'] == true && decoded['data'] != null) {
+            final fetchedMongoId = decoded['data']['id']?.toString() ?? device.mongoId;
+            url = '${ApiConfig.baseUrl}/api/v1/devices/$fetchedMongoId/share';
+          } else {
+            throw Exception('Failed to retrieve device details for unsharing.');
+          }
+        } else {
+          throw Exception('Failed to fetch device details.');
+        }
+      }
+
       final response = await http.delete(
         Uri.parse(url),
         headers: {
@@ -302,7 +335,7 @@ class DeviceProvider extends ChangeNotifier {
         _devices.removeWhere((d) => d.id == id);
         _messages.remove(id);
       } else {
-        String errMsg = device.isOwner ? 'Failed to delete device' : 'Failed to unshare device';
+        String errMsg = device.isOwner ? 'Failed to delete device' : 'Failed to leave device';
         try {
           final body = jsonDecode(response.body);
           if (body is Map && body.containsKey('message')) {
@@ -312,7 +345,57 @@ class DeviceProvider extends ChangeNotifier {
         throw Exception(errMsg);
       }
     } catch (e) {
-      debugPrint('Error deleting/unsharing device: $e');
+      debugPrint('Error deleting/leaving device: $e');
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateDeviceName(String id, String newName) async {
+    final token = await _getToken();
+    if (token == null) throw Exception('Not authenticated');
+
+    _isLoading = true;
+    notifyListeners();
+
+    final url = '${ApiConfig.baseUrl}/api/v1/devices/$id';
+
+    try {
+      final response = await http.put(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'deviceName': newName.trim(),
+        }),
+      );
+
+      debugPrint('--> [API REQUEST] PUT $url');
+      debugPrint('<-- [API RESPONSE] ${response.statusCode} PUT $url');
+      debugPrint('Response Body: ${response.body}');
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final index = _devices.indexWhere((d) => d.id == id);
+        if (index != -1) {
+          _devices[index] = _devices[index].copyWith(name: newName);
+        }
+        notifyListeners();
+      } else {
+        String errMsg = 'Failed to update device name';
+        try {
+          final body = jsonDecode(response.body);
+          if (body is Map && body.containsKey('message')) {
+            errMsg = body['message'].toString();
+          }
+        } catch (_) {}
+        throw Exception(errMsg);
+      }
+    } catch (e) {
+      debugPrint('Error updating device name: $e');
       rethrow;
     } finally {
       _isLoading = false;
@@ -513,8 +596,7 @@ class DeviceProvider extends ChangeNotifier {
       ).timeout(const Duration(seconds: 5));
       debugPrint('<-- [WEBSOCKET CONNECTED] Successfully connected to $wsUrlString');
 
-      // Automatically send status command from Info button on connection
-      sendMessage(deviceId, '/status');
+
 
       // Schedule the 10s heartbeat check. If no response comes within 10s, it goes offline.
       _heartbeatTimer?.cancel();
@@ -524,7 +606,7 @@ class DeviceProvider extends ChangeNotifier {
         await fetchDeviceById(deviceId);
       });
 
-      _webSocket!.listen(
+      _wsSubscription = _webSocket!.listen(
         (data) {
           debugPrint('[WEBSOCKET RECEIVED] Data: $data');
           try {
@@ -670,7 +752,7 @@ class DeviceProvider extends ChangeNotifier {
               }
             }
 
-            if (textMsg != null) {
+            if ((hasDeviceId || hasData) && textMsg != null) {
               final newMsg = MessageModel(
                 id: event['id'] as String? ?? 'ws_${DateTime.now().millisecondsSinceEpoch}',
                 text: textMsg,
@@ -680,16 +762,7 @@ class DeviceProvider extends ChangeNotifier {
               _addMessageLocally(deviceId, newMsg);
             }
           } catch (e) {
-            debugPrint('Error parsing WebSocket data: $e');
-            if (data is String) {
-              final newMsg = MessageModel(
-                id: 'ws_${DateTime.now().millisecondsSinceEpoch}',
-                text: data,
-                timestamp: DateTime.now(),
-                isUser: false,
-              );
-              _addMessageLocally(deviceId, newMsg);
-            }
+            debugPrint('Error parsing WebSocket data (ignored for chat): $e');
           }
         },
         onError: (err) {
@@ -714,6 +787,8 @@ class DeviceProvider extends ChangeNotifier {
 
   Future<void> disconnectWebSocket() async {
     _heartbeatTimer?.cancel();
+    _wsSubscription?.cancel();
+    _wsSubscription = null;
     _deviceConnectionStatus.clear();
     if (_webSocket != null) {
       debugPrint('--> [WEBSOCKET CLOSE] Closing WebSocket connection');

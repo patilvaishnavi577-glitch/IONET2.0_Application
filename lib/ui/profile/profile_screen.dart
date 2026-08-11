@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../core/providers/auth_provider.dart';
@@ -83,11 +84,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _saveProfile() async {
+    final mobileText = _mobileController.text.trim();
+    if (mobileText.length != 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Mobile number must be exactly 10 digits.')),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
       await Provider.of<AuthProvider>(context, listen: false).updateProfile(
         _nameController.text,
-        _mobileController.text,
+        mobileText,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -175,6 +184,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 prefixIcon: Icon(Icons.phone_rounded),
               ),
               keyboardType: TextInputType.phone,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(10),
+              ],
             ),
             const SizedBox(height: 32),
             _isLoading

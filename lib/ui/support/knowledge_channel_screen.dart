@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../core/providers/support_provider.dart';
 import 'knowledge_device_model.dart';
 
 class KnowledgeChannelScreen extends StatelessWidget {
@@ -14,6 +16,13 @@ class KnowledgeChannelScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final supportProvider = Provider.of<SupportProvider>(context);
+    final activeChannel = supportProvider.channels.firstWhere(
+      (c) => c.id == channel.id,
+      orElse: () => channel,
+    );
+    final isFollowing = supportProvider.isFollowing(activeChannel.id);
+
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
@@ -30,15 +39,39 @@ class KnowledgeChannelScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(channel.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  Text('${channel.followers} followers', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  Text(activeChannel.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  Text('${activeChannel.followers} followers', style: const TextStyle(fontSize: 12, color: Colors.grey)),
                 ],
               ),
             ),
           ],
         ),
         actions: [
-          IconButton(icon: const Icon(Icons.more_vert), onPressed: () {}),
+          TextButton(
+            onPressed: () async {
+              final messenger = ScaffoldMessenger.of(context);
+              try {
+                if (isFollowing) {
+                  await supportProvider.unfollowChannel(activeChannel.id);
+                } else {
+                  await supportProvider.followChannel(activeChannel.id);
+                }
+              } catch (e) {
+                messenger.showSnackBar(
+                  SnackBar(content: Text('Action failed: $e')),
+                );
+              }
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: isFollowing 
+                  ? (Theme.of(context).brightness == Brightness.dark ? Colors.white70 : Colors.black87) 
+                  : const Color(0xFF00A884),
+            ),
+            child: Text(
+              isFollowing ? 'Unfollow' : 'Follow',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
         ],
       ),
       body: Container(

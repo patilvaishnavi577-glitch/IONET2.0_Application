@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../core/providers/auth_provider.dart';
 import '../devices/home_screen.dart';
@@ -22,16 +23,23 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       );
       return;
     }
-    if (_mobileController.text.isEmpty) {
+    final mobileText = _mobileController.text.trim();
+    if (mobileText.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter your phone number')),
+      );
+      return;
+    }
+    if (mobileText.length != 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Mobile number must be exactly 10 digits.')),
       );
       return;
     }
     setState(() => _isLoading = true);
     try {
       await Provider.of<AuthProvider>(context, listen: false)
-          .completeProfile(_nameController.text.trim(), _mobileController.text.trim());
+          .completeProfile(_nameController.text.trim(), mobileText);
       
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -67,6 +75,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               controller: _mobileController,
               decoration: const InputDecoration(labelText: 'Mobile Number', prefixIcon: Icon(Icons.phone_rounded)),
               keyboardType: TextInputType.phone,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(10),
+              ],
             ),
             const SizedBox(height: 32),
             _isLoading

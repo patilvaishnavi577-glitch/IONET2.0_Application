@@ -1,1 +1,2 @@
-const String apiRoutePath = 'http://103.150.186.252:8080';
+const String apiRoutePath = 'https://api.ionet.sunshineiot.in';
+const String appVersion = '0.1.2';

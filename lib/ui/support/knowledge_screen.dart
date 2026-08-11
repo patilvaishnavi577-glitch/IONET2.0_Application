@@ -1,7 +1,6 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import '../../core/api_config.dart';
+import 'package:provider/provider.dart';
+import '../../core/providers/support_provider.dart';
 import 'knowledge_device_model.dart';
 import 'knowledge_channel_screen.dart';
 
@@ -13,101 +12,99 @@ class KnowledgeScreen extends StatefulWidget {
 }
 
 class _KnowledgeScreenState extends State<KnowledgeScreen> {
-  List<KnowledgeDevice> _devices = [];
-  bool _isLoading = true;
-  String? _error;
-
   @override
   void initState() {
     super.initState();
-    _fetchChannels();
-  }
-
-  Future<void> _fetchChannels() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final provider = Provider.of<SupportProvider>(context, listen: false);
+      provider.fetchChannels();
+      provider.fetchSubscribedChannels();
     });
-
-    try {
-      final url = Uri.parse('${ApiConfig.baseUrl}/api/v1/channels');
-      debugPrint('--> [API REQUEST] GET $url');
-
-      final response = await http.get(url, headers: {'Content-Type': 'application/json'});
-
-      debugPrint('<-- [API RESPONSE] ${response.statusCode} GET $url');
-      debugPrint('Response Body: ${response.body}');
-
-      if (response.statusCode == 200) {
-        final decoded = jsonDecode(response.body);
-        List<dynamic> list = [];
-        if (decoded is List) {
-          list = decoded;
-        } else if (decoded is Map && decoded['data'] is List) {
-          list = decoded['data'];
-        }
-
-        setState(() {
-          _devices = list.map((json) => KnowledgeDevice.fromJson(json)).toList();
-          _isLoading = false;
-        });
-      } else {
-        setState(() {
-          _error = 'Failed to load channels: ${response.statusCode}';
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error fetching channels: $e');
-      setState(() {
-        _error = 'Error connecting to server';
-        _isLoading = false;
-      });
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    return Consumer<SupportProvider>(
+      builder: (context, provider, child) {
+        if (provider.isLoading && provider.channels.isEmpty) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-    if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(_error!, style: const TextStyle(color: Colors.red)),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _fetchChannels,
-              child: const Text('Retry'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16.0),
-      itemCount: _devices.length + 1,
-      itemBuilder: (context, index) {
-        if (index == 0) {
-          return const Padding(
-            padding: EdgeInsets.only(bottom: 16.0),
-            child: Text(
-              'Channels',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+        if (provider.error != null && provider.channels.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(provider.error!, style: const TextStyle(color: Colors.red)),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () {
+                    provider.fetchChannels();
+                    provider.fetchSubscribedChannels();
+                  },
+                  child: const Text('Retry'),
+                ),
+              ],
             ),
           );
         }
-        final device = _devices[index - 1];
-        return _buildChannelTile(device);
+
+        final allDevices = provider.channels;
+        final followingDevices = allDevices.where((d) => provider.isFollowing(d.id)).toList();
+        final recommendedDevices = allDevices.where((d) => !provider.isFollowing(d.id)).toList();
+
+        final List<Widget> listItems = [];
+
+        if (followingDevices.isNotEmpty) {
+          listItems.add(
+            const Padding(
+              padding: EdgeInsets.only(top: 8.0, bottom: 12.0),
+              child: Text(
+                'Following',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+          );
+          for (var device in followingDevices) {
+            listItems.add(_buildChannelTile(device, provider));
+          }
+        }
+
+        if (recommendedDevices.isNotEmpty) {
+          listItems.add(
+            const Padding(
+              padding: EdgeInsets.only(top: 16.0, bottom: 12.0),
+              child: Text(
+                'Find Channels',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+          );
+          for (var device in recommendedDevices) {
+            listItems.add(_buildChannelTile(device, provider));
+          }
+        }
+
+        if (listItems.isEmpty) {
+          return const Center(
+            child: Text(
+              'No channels available.',
+              style: TextStyle(color: Colors.grey),
+            ),
+          );
+        }
+
+        return ListView(
+          padding: const EdgeInsets.all(16.0),
+          children: listItems,
+        );
       },
     );
   }
 
-  Widget _buildChannelTile(KnowledgeDevice device) {
+  Widget _buildChannelTile(KnowledgeDevice device, SupportProvider provider) {
+    final isFollowing = provider.isFollowing(device.id);
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12.0),
       elevation: 0,
@@ -161,6 +158,29 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
                   ],
                 ),
               ),
+              if (!isFollowing) ...[
+                TextButton(
+                  onPressed: () async {
+                    final messenger = ScaffoldMessenger.of(context);
+                    try {
+                      await provider.followChannel(device.id);
+                    } catch (e) {
+                      messenger.showSnackBar(
+                        SnackBar(content: Text('Action failed: $e')),
+                      );
+                    }
+                  },
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFF00A884),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  child: const Text(
+                    'Follow',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                const SizedBox(width: 4),
+              ],
               Icon(
                 Icons.chevron_right_rounded, 
                 color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.4),

@@ -79,6 +79,70 @@ class _DeviceProfileScreenState extends State<DeviceProfileScreen> {
     }
   }
 
+  void _showEditNameDialog(BuildContext context, DeviceModel device) {
+    final controller = TextEditingController(text: device.name);
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Change Device Name'),
+          content: Form(
+            key: formKey,
+            child: TextFormField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: 'Device Name',
+                hintText: 'Enter new device name',
+              ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Device name cannot be empty';
+                }
+                return null;
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (formKey.currentState?.validate() ?? false) {
+                  final newName = controller.text.trim();
+                  Navigator.pop(context);
+                  
+                  final scaffoldMessenger = ScaffoldMessenger.of(context);
+                  setState(() => _isLoading = true);
+                  
+                  try {
+                    await Provider.of<DeviceProvider>(context, listen: false)
+                        .updateDeviceName(device.id, newName);
+                    scaffoldMessenger.showSnackBar(
+                      const SnackBar(content: Text('Device name updated successfully')),
+                    );
+                  } catch (e) {
+                    scaffoldMessenger.showSnackBar(
+                      SnackBar(content: Text('Failed to update device name: $e')),
+                    );
+                  } finally {
+                    if (mounted) {
+                      setState(() => _isLoading = false);
+                    }
+                  }
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _showShareDeviceDialog(DeviceModel device) {
     final provider = Provider.of<DeviceProvider>(context, listen: false);
     final searchController = TextEditingController();
@@ -102,7 +166,11 @@ class _DeviceProfileScreenState extends State<DeviceProfileScreen> {
                     TextField(
                       controller: searchController,
                       decoration: InputDecoration(
-                        labelText: 'Search user by email or name',
+                        labelText: 'Search user by email or phone no.',
+                        labelStyle: const TextStyle(
+                          fontSize: 12,
+                          fontStyle: FontStyle.italic,
+                        ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(16),
                         ),
@@ -340,6 +408,7 @@ class _DeviceProfileScreenState extends State<DeviceProfileScreen> {
             (d) => d.id == widget.deviceId,
             orElse: () => DeviceModel(
               id: widget.deviceId,
+              mongoId: widget.deviceId,
               name: 'Unknown Device',
               profilePhotoUrl: '',
               lastMessage: '',
@@ -350,9 +419,26 @@ class _DeviceProfileScreenState extends State<DeviceProfileScreen> {
 
           final details = provider.getDeviceDetails(widget.deviceId);
           final isOnline = provider.isDeviceOnline(widget.deviceId);
-          final lastSeenIST = provider.getDeviceLastSeenIST(widget.deviceId);
+
+          String installationDate = 'Unknown';
+          if (details != null && details['createdAt'] != null) {
+            try {
+              final parsedDate = DateTime.parse(details['createdAt'] as String).toLocal();
+              final day = parsedDate.day.toString().padLeft(2, '0');
+              final month = parsedDate.month.toString().padLeft(2, '0');
+              final year = parsedDate.year;
+              final hour = parsedDate.hour.toString().padLeft(2, '0');
+              final minute = parsedDate.minute.toString().padLeft(2, '0');
+              installationDate = '$day/$month/$year, $hour:$minute';
+            } catch (e) {
+              debugPrint('Error parsing createdAt: $e');
+            }
+          }
 
           final String accessType = details?['accessType'] as String? ?? (device.isOwner ? 'OWNER' : 'SHARED');
+          final String displayAccessType = accessType.toUpperCase() == 'OWNER'
+              ? 'Owned'
+              : (accessType.toUpperCase() == 'SHARED' ? 'Shared' : accessType);
           final sharedUsers = details?['sharedUsers'] as List? ?? [];
 
           return Stack(
@@ -414,10 +500,29 @@ class _DeviceProfileScreenState extends State<DeviceProfileScreen> {
                     const SizedBox(height: 16),
 
                     // Device Name and Online Status Dot
-                    Text(
-                      device.name,
-                      style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-                      textAlign: TextAlign.center,
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            device.name,
+                            style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                            textAlign: TextAlign.center,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (device.isOwner) ...[
+                          const SizedBox(width: 4),
+                          IconButton(
+                            icon: const Icon(Icons.edit, size: 20),
+                            onPressed: () => _showEditNameDialog(context, device),
+                            constraints: const BoxConstraints(),
+                            padding: const EdgeInsets.all(4),
+                            tooltip: 'Edit Name',
+                          ),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 8),
 
@@ -458,13 +563,13 @@ class _DeviceProfileScreenState extends State<DeviceProfileScreen> {
                           children: [
                             _buildInfoRow(theme, Icons.fingerprint, 'Device ID', device.id),
                             const Divider(height: 24),
-                            _buildInfoRow(theme, Icons.security, 'Access Level', accessType),
+                            _buildInfoRow(theme, Icons.security, 'Access Level', displayAccessType),
                             const Divider(height: 24),
                             _buildInfoRow(
                               theme,
-                              Icons.access_time,
-                              'Last Activity (IST)',
-                              lastSeenIST ?? 'Unknown',
+                              Icons.calendar_today,
+                              'Installation Date',
+                              installationDate,
                             ),
                           ],
                         ),

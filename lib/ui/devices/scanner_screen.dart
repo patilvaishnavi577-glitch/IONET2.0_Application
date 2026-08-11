@@ -10,6 +10,7 @@ class ScannerScreen extends StatefulWidget {
 
 class _ScannerScreenState extends State<ScannerScreen> {
   final MobileScannerController cameraController = MobileScannerController();
+  bool _hasScanned = false; // Add flag to prevent multiple pops
 
   @override
   void dispose() {
@@ -66,10 +67,14 @@ class _ScannerScreenState extends State<ScannerScreen> {
       body: MobileScanner(
         controller: cameraController,
         onDetect: (capture) {
+          if (_hasScanned) return; // Prevent multiple executions
+
           final List<Barcode> barcodes = capture.barcodes;
           if (barcodes.isNotEmpty) {
             final String? code = barcodes.first.rawValue;
             if (code != null) {
+              _hasScanned = true; // Set flag to true on first successful scan
+              
               // Return the scanned code and pop the screen
               Navigator.pop(context, code);
             }

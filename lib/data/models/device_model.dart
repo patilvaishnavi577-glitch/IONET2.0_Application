@@ -2,6 +2,7 @@ import '../../core/api_config.dart';
 
 class DeviceModel {
   final String id;
+  final String mongoId;
   final String name;
   final String profilePhotoUrl;
   final String lastMessage;
@@ -10,6 +11,7 @@ class DeviceModel {
 
   DeviceModel({
     required this.id,
+    required this.mongoId,
     required this.name,
     required this.profilePhotoUrl,
     required this.lastMessage,
@@ -18,7 +20,8 @@ class DeviceModel {
   });
 
   factory DeviceModel.fromJson(Map<String, dynamic> json) {
-    final String parsedId = json['deviceId'] as String? ?? json['id'] as String? ?? '';
+    final String parsedId = json['deviceId'] as String? ?? json['id'] as String? ?? json['_id'] as String? ?? '';
+    final String parsedMongoId = json['id'] as String? ?? json['_id'] as String? ?? parsedId;
     final String accessType = json['accessType'] as String? ?? 'OWNER';
     final bool isOwner = accessType == 'OWNER';
 
@@ -41,6 +44,7 @@ class DeviceModel {
 
     return DeviceModel(
       id: parsedId,
+      mongoId: parsedMongoId,
       name: json['deviceName'] as String? ?? json['name'] as String? ?? 'Unnamed Device',
       profilePhotoUrl: parsedPhotoUrl,
       lastMessage: json['lastMessage'] as String? ?? 'No messages yet',
@@ -58,6 +62,7 @@ class DeviceModel {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      'mongoId': mongoId,
       'name': name,
       'profilePhotoUrl': profilePhotoUrl,
       'lastMessage': lastMessage,
@@ -68,6 +73,7 @@ class DeviceModel {
 
   DeviceModel copyWith({
     String? id,
+    String? mongoId,
     String? name,
     String? profilePhotoUrl,
     String? lastMessage,
@@ -76,6 +82,7 @@ class DeviceModel {
   }) {
     return DeviceModel(
       id: id ?? this.id,
+      mongoId: mongoId ?? this.mongoId,
       name: name ?? this.name,
       profilePhotoUrl: profilePhotoUrl ?? this.profilePhotoUrl,
       lastMessage: lastMessage ?? this.lastMessage,
