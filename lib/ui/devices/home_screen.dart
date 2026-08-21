@@ -644,103 +644,114 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      extendBody: false,
-      appBar: _currentIndex == 0
-          ? AppBar(
-              title: Image.asset(
-                'assets/ionet_logo.png',
-                height: 38,
-                fit: BoxFit.contain,
-              ),
-              centerTitle: false,
-            )
-          : AppBar(
-              title: Text(
-                ['Devices', 'Updates', 'Support', 'Profile'][_currentIndex],
-              ),
-              actions: _currentIndex == 2
-                  ? [
-                      IconButton(
-                        icon: Image.asset(
-                          'assets/whatsapp_logo.png',
-                          width: 24,
-                          height: 24,
-                        ),
-                        tooltip: 'Join WhatsApp Community',
-                        onPressed: () async {
-                          final Uri url = Uri.parse(
-                            'https://whatsapp.com/channel/0029VbBPglwATRSi0Zibax3w',
-                          );
-                          if (!await launchUrl(
-                            url,
-                            mode: LaunchMode.externalApplication,
-                          )) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Could not open WhatsApp channel link',
+    return PopScope(
+      canPop: _currentIndex == 0,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (_currentIndex != 0) {
+          setState(() {
+            _currentIndex = 0;
+          });
+        }
+      },
+      child: Scaffold(
+        extendBody: false,
+        appBar: _currentIndex == 0
+            ? AppBar(
+                title: Image.asset(
+                  'assets/ionet_logo.png',
+                  height: 38,
+                  fit: BoxFit.contain,
+                  ),
+                centerTitle: false,
+              )
+            : AppBar(
+                title: Text(
+                  ['Devices', 'Updates', 'Support', 'Profile'][_currentIndex],
+                ),
+                actions: _currentIndex == 2
+                    ? [
+                        IconButton(
+                          icon: Image.asset(
+                            'assets/whatsapp_logo.png',
+                            width: 24,
+                            height: 24,
+                          ),
+                          tooltip: 'Join WhatsApp Community',
+                          onPressed: () async {
+                            final Uri url = Uri.parse(
+                              'https://whatsapp.com/channel/0029VbBPglwATRSi0Zibax3w',
+                            );
+                            if (!await launchUrl(
+                              url,
+                              mode: LaunchMode.externalApplication,
+                            )) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Could not open WhatsApp channel link',
+                                    ),
                                   ),
-                                ),
-                              );
+                                );
+                              }
                             }
-                          }
-                        },
-                      ),
-                    ]
-                  : null,
-            ),
-      body: _buildBody(),
-      floatingActionButton: _currentIndex == 0
-          ? FloatingActionButton(
-              onPressed: _showAddDeviceDialog,
-              child: const Icon(Icons.add),
-            )
-          : (_currentIndex == 2
-                ? FloatingActionButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const HelpScreen(),
+                          },
                         ),
-                      );
-                    },
-                    child: const Icon(Icons.help_outline),
-                  )
-                : null),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (index) {
-          setState(() => _currentIndex = index);
-          if (index == 0) {
-            Provider.of<AuthProvider>(context, listen: false).fetchProfile();
-            Provider.of<DeviceProvider>(context, listen: false).fetchDevices();
-          }
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.chat_bubble_outline_rounded),
-            selectedIcon: Icon(Icons.chat_bubble_rounded),
-            label: 'Devices',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.sync_rounded),
-            selectedIcon: Icon(Icons.sync_rounded),
-            label: 'Updates',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.help_outline_rounded),
-            selectedIcon: Icon(Icons.help_rounded),
-            label: 'Support',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline_rounded),
-            selectedIcon: Icon(Icons.person_rounded),
-            label: 'Profile',
-          ),
-        ],
+                      ]
+                    : null,
+              ),
+        body: _buildBody(),
+        floatingActionButton: _currentIndex == 0
+            ? FloatingActionButton(
+                onPressed: _showAddDeviceDialog,
+                child: const Icon(Icons.add),
+              )
+            : (_currentIndex == 2
+                  ? FloatingActionButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const HelpScreen(),
+                          ),
+                        );
+                      },
+                      child: const Icon(Icons.help_outline),
+                    )
+                  : null),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _currentIndex,
+          onDestinationSelected: (index) {
+            setState(() => _currentIndex = index);
+            if (index == 0) {
+              Provider.of<AuthProvider>(context, listen: false).fetchProfile();
+              Provider.of<DeviceProvider>(context, listen: false).fetchDevices();
+            }
+          },
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.chat_bubble_outline_rounded),
+              selectedIcon: Icon(Icons.chat_bubble_rounded),
+              label: 'Devices',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.sync_rounded),
+              selectedIcon: Icon(Icons.sync_rounded),
+              label: 'Updates',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.help_outline_rounded),
+              selectedIcon: Icon(Icons.help_rounded),
+              label: 'Support',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.person_outline_rounded),
+              selectedIcon: Icon(Icons.person_rounded),
+              label: 'Profile',
+            ),
+          ],
+        ),
       ),
     );
   }
