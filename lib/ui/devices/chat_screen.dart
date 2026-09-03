@@ -13,16 +13,16 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
-  void _sendMessage([String? text]) {
+  void _sendMessage([String? text, String? displayText]) {
     final message = text ?? _messageController.text.trim();
     if (message.isEmpty) return;
 
     Provider.of<DeviceProvider>(context, listen: false)
-        .sendMessage(widget.device.id, message);
+        .sendMessage(widget.device.id, message, displayText: displayText);
     
     _messageController.clear();
     _scrollToBottom();
@@ -31,6 +31,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _scrollToBottom();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = Provider.of<DeviceProvider>(context, listen: false);
@@ -42,8 +43,22 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
-    Provider.of<DeviceProvider>(context, listen: false).disconnectWebSocket();
+    WidgetsBinding.instance.removeObserver(this);
+    Provider.of<DeviceProvider>(context, listen: false).disconnectWebSocket(intentional: true);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      final provider = Provider.of<DeviceProvider>(context, listen: false);
+      final status = provider.getDeviceConnectionStatus(widget.device.id);
+      if (status != 'online' && status != 'connecting') {
+        debugPrint('[LIFECYCLE RESUMED] Reconnecting WebSocket for device ${widget.device.id}');
+        provider.connectWebSocket(widget.device.id);
+      }
+    }
   }
 
   void _scrollToBottom() {
@@ -184,16 +199,60 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  List<TextSpan> buildColoredSpans(String text, bool isDark, TextStyle defaultStyle) {
+    final List<TextSpan> spans = [];
+    final RegExp regExp = RegExp(r'\b(on|off)\b', caseSensitive: false);
+    
+    int start = 0;
+    final matches = regExp.allMatches(text);
+    
+    for (final match in matches) {
+      if (match.start > start) {
+        spans.add(TextSpan(
+          text: text.substring(start, match.start),
+          style: defaultStyle,
+        ));
+      }
+      
+      final word = match.group(0)!;
+      final isOn = word.toLowerCase() == 'on';
+      final color = isOn
+          ? (isDark ? const Color(0xFF4ADE80) : const Color(0xFF16A34A))
+          : (isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626));
+          
+      spans.add(TextSpan(
+        text: word,
+        style: defaultStyle.copyWith(
+          color: color,
+          fontWeight: FontWeight.bold,
+        ),
+      ));
+      
+      start = match.end;
+    }
+    
+    if (start < text.length) {
+      spans.add(TextSpan(
+        text: text.substring(start),
+        style: defaultStyle,
+      ));
+    }
+    
+    return spans;
+  }
+
   Widget _buildFormattedMessage(BuildContext context, String text, bool isUser) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     
     if (isUser) {
-      return Text(
-        text,
-        style: TextStyle(
-          color: theme.colorScheme.onPrimary,
-          fontSize: 13,
+      return Text.rich(
+        TextSpan(
+          style: TextStyle(
+            color: theme.colorScheme.onPrimary,
+            fontSize: 13,
+          ),
+          children: buildColoredSpans(text, isDark, TextStyle(color: theme.colorScheme.onPrimary, fontSize: 13)),
         ),
       );
     }
@@ -209,73 +268,24 @@ class _ChatScreenState extends State<ChatScreen> {
         continue;
       }
       
+      // Skip available commands from displaying in message bubble
       if (line.startsWith('/')) {
-        final index = line.indexOf(' : ');
-        final String cmd = index != -1 ? line.substring(0, index) : line;
-        final String desc = index != -1 ? line.substring(index) : '';
-        
-        widgets.add(
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: InkWell(
-              onTap: () => _sendMessage(cmd),
-              borderRadius: BorderRadius.circular(4),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
-                child: RichText(
-                  text: TextSpan(
-                    style: const TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: 13,
-                      height: 1.3,
-                    ),
-                    children: [
-                      TextSpan(
-                        text: cmd,
-                        style: TextStyle(
-                          color: isDark ? const Color(0xFF4ADE80) : const Color(0xFF00A884), 
-                          fontWeight: FontWeight.bold,
-                          decoration: TextDecoration.underline,
-                        ),
-                      ),
-                      TextSpan(
-                        text: desc,
-                        style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600]),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
+        continue;
+      }
+
+      // Skip Device ID from displaying at message start
+      if (line.toLowerCase().startsWith('device id')) {
         continue;
       }
 
       final List<TextSpan> spans = [];
-      if (line.startsWith('Device Id :')) {
-        final parts = line.split('Device Id :');
-        spans.add(TextSpan(
-          text: 'Device Id : ',
-          style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600]),
-        ));
-        spans.add(TextSpan(
-          text: parts.length > 1 ? parts[1] : '',
-          style: TextStyle(
-            color: isDark ? Colors.white : Colors.black,
-            fontWeight: FontWeight.bold,
-          ),
-        ));
-      } else if (line.startsWith('Firmware:')) {
+      if (line.startsWith('Firmware:')) {
         final parts = line.split('Firmware:');
         spans.add(TextSpan(
           text: 'Firmware: ',
           style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600]),
         ));
-        spans.add(TextSpan(
-          text: parts.length > 1 ? parts[1] : '',
-          style: TextStyle(color: isDark ? Colors.white : Colors.black),
-        ));
+        spans.addAll(buildColoredSpans(parts.length > 1 ? parts[1] : '', isDark, TextStyle(color: isDark ? Colors.white : Colors.black)));
       } else if (line.contains('Status:')) {
         final index = line.indexOf(':');
         if (index != -1) {
@@ -286,34 +296,19 @@ class _ChatScreenState extends State<ChatScreen> {
             style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600]),
           ));
           
-          final isValOn = suffix.toLowerCase().contains('on');
-          final isValOff = suffix.toLowerCase().contains('off');
-          final statusColor = isValOn 
-              ? (isDark ? const Color(0xFF4ADE80) : const Color(0xFF16A34A)) 
-              : (isValOff 
-                  ? (isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626)) 
-                  : (isDark ? Colors.white : Colors.black87));
-          
-          spans.add(TextSpan(
-            text: suffix,
-            style: TextStyle(
-              color: statusColor,
-              fontWeight: FontWeight.bold,
-            ),
-          ));
+          spans.addAll(buildColoredSpans(suffix, isDark, const TextStyle(
+            fontWeight: FontWeight.bold,
+          )));
         } else {
-          spans.add(TextSpan(text: line, style: TextStyle(color: isDark ? Colors.white : Colors.black)));
+          spans.addAll(buildColoredSpans(line, isDark, TextStyle(color: isDark ? Colors.white : Colors.black)));
         }
       } else {
-        spans.add(TextSpan(
-          text: line,
-          style: TextStyle(color: isDark ? Colors.white : Colors.black87),
-        ));
+        spans.addAll(buildColoredSpans(line, isDark, TextStyle(color: isDark ? Colors.white : Colors.black87)));
       }
 
       widgets.add(
-        RichText(
-          text: TextSpan(
+        Text.rich(
+          TextSpan(
             style: TextStyle(
               fontFamily: 'monospace',
               fontSize: 13,
@@ -322,6 +317,17 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             children: spans,
           ),
+        ),
+      );
+    }
+
+    if (widgets.isEmpty && text.trim().isNotEmpty) {
+      return Text(
+        text,
+        style: TextStyle(
+          fontFamily: 'monospace',
+          fontSize: 13,
+          color: isDark ? Colors.white : Colors.black87,
         ),
       );
     }
@@ -390,7 +396,7 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
               const SizedBox(height: 32),
               ElevatedButton.icon(
-                onPressed: isLive ? () => _sendMessage('/status') : null,
+                onPressed: isLive ? () => _sendMessage('/status', 'Get device status') : null,
                 icon: const Icon(Icons.show_chart_rounded, size: 20),
                 label: const Text(
                   'Get device status',
@@ -484,27 +490,37 @@ class _ChatScreenState extends State<ChatScreen> {
                           statusLabel = 'Connecting...';
                         } else if (lastSeen != null) {
                           statusLabel = 'Offline • $lastSeen';
+                        } else {
+                          statusLabel = 'Offline • Tap to retry';
                         }
                         
-                        return Row(
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: dotColor,
+                        return InkWell(
+                          borderRadius: BorderRadius.circular(4),
+                          onTap: (connStatus == 'online' || connStatus == 'connecting')
+                              ? null
+                              : () {
+                                  deviceProvider.connectWebSocket(activeDevice.id);
+                                },
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: dotColor,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                statusLabel,
-                                style: const TextStyle(fontSize: 10, color: Colors.grey),
-                                overflow: TextOverflow.ellipsis,
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  statusLabel,
+                                  style: const TextStyle(fontSize: 10, color: Colors.grey),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         );
                       },
                     ),
@@ -514,7 +530,41 @@ class _ChatScreenState extends State<ChatScreen> {
             ],
           ),
         ),
-
+        actions: [
+          if (activeDevice.isOwner)
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert),
+              onSelected: (value) {
+                if (value == 'config') {
+                  _showConfigurationDialog(context, deviceProvider, activeDevice);
+                } else if (value == 'wifi_setup') {
+                  _showWifiSetupDialog(context, deviceProvider, activeDevice);
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem<String>(
+                  value: 'config',
+                  child: Row(
+                    children: [
+                      Icon(Icons.settings_outlined, size: 20),
+                      SizedBox(width: 8),
+                      Text('Configuration'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem<String>(
+                  value: 'wifi_setup',
+                  child: Row(
+                    children: [
+                      Icon(Icons.wifi, size: 20),
+                      SizedBox(width: 8),
+                      Text('Wi-Fi Setup'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+        ],
       ),
       body: Consumer<DeviceProvider>(
         builder: (context, provider, child) {
@@ -552,73 +602,6 @@ class _ChatScreenState extends State<ChatScreen> {
                         },
                       ),
               ),
-              if (messages.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  height: 42,
-                  child: Builder(
-                    builder: (context) {
-                      final commands = provider.getQuickCommands(widget.device.id);
-                      return ListView(
-                        scrollDirection: Axis.horizontal,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
-                            child: Material(
-                              color: Theme.of(context).colorScheme.primaryContainer,
-                              shape: const CircleBorder(),
-                              child: IconButton(
-                                icon: Icon(Icons.add, size: 16, color: Theme.of(context).colorScheme.onPrimaryContainer),
-                                onPressed: () => _showAddCommandDialog(provider),
-                                constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
-                                padding: EdgeInsets.zero,
-                              ),
-                            ),
-                          ),
-                          ...commands.asMap().entries.map((entry) {
-                            final command = entry.value;
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
-                              child: Material(
-                                color: Theme.of(context).colorScheme.secondaryContainer,
-                                shape: const StadiumBorder(),
-                                child: InkWell(
-                                  onTap: () => _sendMessage(command.message),
-                                  onLongPress: () {
-                                    if (provider.isCustomCommand(widget.device.id, command)) {
-                                      _showEditCommandDialog(provider, command);
-                                    } else {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(
-                                          content: Text('Only custom buttons can be edited.'),
-                                          duration: Duration(seconds: 2),
-                                        ),
-                                      );
-                                    }
-                                  },
-                                  customBorder: const StadiumBorder(),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                    child: Center(
-                                      child: Text(
-                                        command.label,
-                                        style: TextStyle(
-                                          color: Theme.of(context).colorScheme.onSecondaryContainer,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            );
-                          }),
-                        ],
-                      );
-                    }
-                  ),
-                ),
               SafeArea(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
@@ -638,8 +621,13 @@ class _ChatScreenState extends State<ChatScreen> {
                                     : (isDark ? Colors.grey[600] : Colors.grey[400]),
                                 size: 22,
                               ),
-                              onPressed: isLive ? () => _sendMessage('/status') : null,
+                              onPressed: isLive ? () => _sendMessage('/status', 'Get device status') : null,
                               tooltip: 'Get device status',
+                            ),
+                            suffixIcon: IconButton(
+                              icon: const Icon(Icons.bolt_rounded, color: Color(0xFF00A884)),
+                              tooltip: 'Quick Commands',
+                              onPressed: () => _showCommandPaletteBottomSheet(context, provider),
                             ),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(24),
@@ -675,5 +663,600 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  void _showConfigurationDialog(BuildContext context, DeviceProvider provider, DeviceModel activeDevice) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return DeviceConfigDialog(
+          provider: provider,
+          device: activeDevice,
+        );
+      },
+    );
+  }
 
+  void _showWifiSetupDialog(BuildContext context, DeviceProvider provider, DeviceModel activeDevice) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return WifiSetupDialog(
+          provider: provider,
+          device: activeDevice,
+        );
+      },
+    );
+  }
+
+  void _showCommandPaletteBottomSheet(BuildContext context, DeviceProvider provider) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: false,
+      backgroundColor: Colors.transparent,
+      builder: (bottomSheetContext) {
+        final theme = Theme.of(bottomSheetContext);
+        final isDark = theme.brightness == Brightness.dark;
+        final deviceCommands = provider.getDeviceCommands(widget.device.id);
+        final customCommands = provider.getCustomCommands(widget.device.id);
+
+        return Container(
+          margin: const EdgeInsets.only(left: 12, right: 12, bottom: 16),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E2630) : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDark ? 0.4 : 0.12),
+                blurRadius: 18,
+                offset: const Offset(0, -2),
+              ),
+            ],
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Minimal Header
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 12, 12, 8),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.bolt_rounded,
+                        color: Color(0xFF00A884),
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Quick Commands',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Spacer(),
+                      TextButton.icon(
+                        onPressed: () {
+                          Navigator.pop(bottomSheetContext);
+                          _showAddCommandDialog(provider);
+                        },
+                        icon: const Icon(Icons.add_rounded, size: 16, color: Color(0xFF00A884)),
+                        label: const Text(
+                          'Add',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF00A884),
+                          ),
+                        ),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1, thickness: 0.6),
+                // Compact list area
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 1. Device Commands (labels only, no command strings)
+                        ...deviceCommands.map((command) {
+                          return _buildMinimalCommandTile(
+                            context: bottomSheetContext,
+                            command: command,
+                            isCustom: false,
+                            isDark: isDark,
+                            onTap: () {
+                              Navigator.pop(bottomSheetContext);
+                              _sendMessage(command.message, command.label);
+                            },
+                          );
+                        }),
+                        // 2. Custom Buttons (at the end)
+                        ...customCommands.map((command) {
+                          return _buildMinimalCommandTile(
+                            context: bottomSheetContext,
+                            command: command,
+                            isCustom: true,
+                            isDark: isDark,
+                            onTap: () {
+                              Navigator.pop(bottomSheetContext);
+                              _sendMessage(command.message, command.label);
+                            },
+                            onEdit: () {
+                              Navigator.pop(bottomSheetContext);
+                              _showEditCommandDialog(provider, command);
+                            },
+                          );
+                        }),
+                        if (deviceCommands.isEmpty && customCommands.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 18),
+                            child: Text(
+                              'No commands available',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: isDark ? Colors.grey[500] : Colors.grey[400],
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMinimalCommandTile({
+    required BuildContext context,
+    required QuickCommandModel command,
+    required bool isCustom,
+    required bool isDark,
+    required VoidCallback onTap,
+    VoidCallback? onEdit,
+  }) {
+    IconData icon = Icons.chevron_right_rounded;
+    final lowerLabel = command.label.toLowerCase();
+    final lowerMsg = command.message.toLowerCase();
+    
+    if (lowerLabel.contains('status') || lowerMsg.contains('status')) {
+      icon = Icons.show_chart_rounded;
+    } else if (lowerLabel.contains('reboot') || lowerMsg.contains('reboot')) {
+      icon = Icons.restart_alt_rounded;
+    } else if (lowerLabel.contains('diagnose') || lowerMsg.contains('diagnose')) {
+      icon = Icons.healing_rounded;
+    } else if (isCustom) {
+      icon = Icons.touch_app_rounded;
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: onTap,
+          onLongPress: onEdit,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                Icon(
+                  icon,
+                  size: 18,
+                  color: const Color(0xFF00A884),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    command.label,
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w500,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (isCustom && onEdit != null)
+                  InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: onEdit,
+                    child: Padding(
+                      padding: const EdgeInsets.all(4.0),
+                      child: Icon(
+                        Icons.edit_outlined,
+                        size: 16,
+                        color: isDark ? Colors.grey[400] : Colors.grey[500],
+                      ),
+                    ),
+                  )
+                else
+                  Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    size: 11,
+                    color: isDark ? Colors.grey[600] : Colors.grey[400],
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
+
+class DeviceConfigDialog extends StatefulWidget {
+  final DeviceProvider provider;
+  final DeviceModel device;
+
+  const DeviceConfigDialog({
+    super.key,
+    required this.provider,
+    required this.device,
+  });
+
+  @override
+  State<DeviceConfigDialog> createState() => _DeviceConfigDialogState();
+}
+
+class _DeviceConfigDialogState extends State<DeviceConfigDialog> {
+  final List<ConfigItem> configItems = [];
+
+  @override
+  void initState() {
+    super.initState();
+    refillData();
+  }
+
+  void refillData() {
+    for (final item in configItems) {
+      item.dispose();
+    }
+    configItems.clear();
+
+    final latestData = widget.provider.getLatestDeviceStatusData(widget.device.id);
+    if (latestData != null && latestData.isNotEmpty) {
+      latestData.forEach((key, val) {
+        final isNA = key.toUpperCase().startsWith('NA');
+        configItems.add(ConfigItem(key: key, value: isNA ? '' : key));
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final item in configItems) {
+      item.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: const Color(0xFF00A884).withOpacity(0.12),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.tune_rounded, color: Color(0xFF00A884), size: 20),
+          ),
+          const SizedBox(width: 10),
+          const Text('Device Configuration', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        ],
+      ),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'TELEMETRY ITEMS',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
+                      color: isDark ? Colors.grey[400] : Colors.grey[600],
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        refillData();
+                      });
+                    },
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: const Text('Reset', style: TextStyle(fontSize: 12)),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (configItems.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 20.0),
+                  child: Center(
+                    child: Text(
+                      'No status configuration data available.\nPlease query device status in the chat first.',
+                      style: TextStyle(color: Colors.grey, fontSize: 13),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                )
+              else
+                ...configItems.map((item) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 14.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.key,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13.5,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: item.valueController,
+                          decoration: InputDecoration(
+                            hintText: 'Enter custom name for ${item.key}',
+                            hintStyle: TextStyle(
+                              fontSize: 12.5,
+                              color: isDark ? Colors.grey[500] : Colors.grey[400],
+                            ),
+                            suffixIcon: item.valueController.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear_rounded, size: 16),
+                                    onPressed: () {
+                                      setState(() {
+                                        item.valueController.clear();
+                                      });
+                                    },
+                                  )
+                                : null,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            isDense: true,
+                          ),
+                          style: const TextStyle(fontSize: 13.5),
+                          onChanged: (_) {
+                            setState(() {});
+                          },
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () {
+            FocusManager.instance.primaryFocus?.unfocus();
+            Navigator.pop(context);
+          },
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: configItems.isEmpty
+              ? null
+              : () {
+                  final Map<String, dynamic> configData = {};
+                  for (int i = 0; i < configItems.length; i++) {
+                    final item = configItems[i];
+                    final val = item.valueController.text.trim();
+                    configData[item.key] = val.isNotEmpty ? val : item.key;
+                  }
+
+                  widget.provider.sendConfig(widget.device.id, configData);
+                  
+                  FocusManager.instance.primaryFocus?.unfocus();
+                  Navigator.pop(context);
+                  
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Configuration command sent successfully')),
+                  );
+                },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF00A884),
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+          child: const Text('Send'),
+        ),
+      ],
+    );
+  }
+}
+
+class ConfigItem {
+  final String key;
+  final TextEditingController valueController;
+
+  ConfigItem({required this.key, required String value})
+      : valueController = TextEditingController(text: value);
+
+  void dispose() {
+    valueController.dispose();
+  }
+}
+
+class WifiSetupDialog extends StatefulWidget {
+  final DeviceProvider provider;
+  final DeviceModel device;
+
+  const WifiSetupDialog({
+    super.key,
+    required this.provider,
+    required this.device,
+  });
+
+  @override
+  State<WifiSetupDialog> createState() => _WifiSetupDialogState();
+}
+
+class _WifiSetupDialogState extends State<WifiSetupDialog> {
+  final _ssidController = TextEditingController();
+  final _passController = TextEditingController();
+  bool _obscurePassword = true;
+  String? _ssidError;
+
+  @override
+  void dispose() {
+    _ssidController.dispose();
+    _passController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.wifi, color: Color(0xFF00A884)),
+          SizedBox(width: 8),
+          Text('Wi-Fi Setup'),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Enter the Wi-Fi credentials to configure on your device.',
+              style: TextStyle(
+                fontSize: 13,
+                color: isDark ? Colors.grey[400] : Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _ssidController,
+              decoration: InputDecoration(
+                labelText: 'Wi-Fi SSID',
+                hintText: 'e.g. Home Network',
+                prefixIcon: const Icon(Icons.wifi_rounded, size: 20),
+                errorText: _ssidError,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              ),
+              onChanged: (val) {
+                if (_ssidError != null && val.trim().isNotEmpty) {
+                  setState(() {
+                    _ssidError = null;
+                  });
+                }
+              },
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _passController,
+              obscureText: _obscurePassword,
+              decoration: InputDecoration(
+                labelText: 'Wi-Fi Password',
+                hintText: 'Enter network password',
+                prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                    size: 20,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _obscurePassword = !_obscurePassword;
+                    });
+                  },
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () {
+            FocusManager.instance.primaryFocus?.unfocus();
+            Navigator.pop(context);
+          },
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            final ssid = _ssidController.text.trim();
+            final pass = _passController.text;
+
+            if (ssid.isEmpty) {
+              setState(() {
+                _ssidError = 'SSID is required';
+              });
+              return;
+            }
+
+            widget.provider.sendWifiSetup(widget.device.id, ssid, pass);
+
+            FocusManager.instance.primaryFocus?.unfocus();
+            Navigator.pop(context);
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Wi-Fi setup command sent successfully')),
+            );
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF00A884),
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('Send'),
+        ),
+      ],
+    );
+  }
+}
+

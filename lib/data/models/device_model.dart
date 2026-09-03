@@ -23,7 +23,7 @@ class DeviceModel {
     final String parsedId = json['deviceId'] as String? ?? json['id'] as String? ?? json['_id'] as String? ?? '';
     final String parsedMongoId = json['id'] as String? ?? json['_id'] as String? ?? parsedId;
     final String accessType = json['accessType'] as String? ?? 'OWNER';
-    final bool isOwner = accessType == 'OWNER';
+    final bool isOwner = accessType.toUpperCase() == 'OWNER';
 
     final String rawImage = json['deviceImage'] as String? ?? 
                             json['profilePhotoUrl'] as String? ?? '';

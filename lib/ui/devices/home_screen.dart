@@ -107,6 +107,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     inputFormatters: [
                       FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9]')),
+                      LengthLimitingTextInputFormatter(12),
                     ],
                     onChanged: (val) {
                       if (idError != null && val.trim().isNotEmpty) {
@@ -150,9 +151,13 @@ class _HomeScreenState extends State<HomeScreen> {
                           final nameText = nameController.text.trim();
 
                           setState(() {
-                            idError = idText.isEmpty
-                                ? 'Device ID is required'
-                                : null;
+                            if (idText.isEmpty) {
+                              idError = 'Device ID is required';
+                            } else if (idText.length != 12) {
+                              idError = 'Device ID must be exactly 12 characters';
+                            } else {
+                              idError = null;
+                            }
                             nameError = nameText.isEmpty
                                 ? 'Device Name is required'
                                 : null;
@@ -614,17 +619,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                             overflow: TextOverflow.ellipsis,
                                           ),
                                         ],
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      "${device.timestamp.hour.toString().padLeft(2, '0')}:${device.timestamp.minute.toString().padLeft(2, '0')}",
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSurfaceVariant
-                                            .withOpacity(0.5),
                                       ),
                                     ),
                                   ],

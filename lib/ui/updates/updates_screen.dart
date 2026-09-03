@@ -3,11 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:provider/provider.dart';
 import '../../core/api_config.dart';
-import '../../core/providers/auth_provider.dart';
-import '../../core/providers/device_provider.dart';
-import '../../data/models/message_model.dart';
 
 // -----------------------------------------------------------------------------
 // Models
@@ -281,87 +277,6 @@ class _UpdatesScreenState extends State<UpdatesScreen> {
   }
 
 
-  void _openMyStatusViewer(AuthProvider auth, DeviceProvider devices) {
-    final List<StoryItem> systemStories = [];
-    
-    // Slide 1: Account Overview
-    final userName = auth.name ?? 'Guest User';
-    final credits = auth.credits;
-    final totalDevs = devices.devices.length;
-    final onlineDevs = devices.devices.where((d) => devices.isDeviceOnline(d.id)).length;
-    
-    systemStories.add(
-      StoryItem(
-        type: StoryType.text,
-        text: 'System Overview\n\nUser: $userName\nWallet: $credits Credits\nDevices: $onlineDevs / $totalDevs Online',
-        backgroundColor: const Color(0xFF00A884),
-      ),
-    );
-    
-    // Slide 2..N: Device specific slides
-    if (devices.devices.isEmpty) {
-      systemStories.add(
-        StoryItem(
-          type: StoryType.text,
-          text: 'No Devices Registered\n\nGo to the Devices tab and click "+" to add a device.',
-          backgroundColor: const Color(0xFF1E3A8A),
-        ),
-      );
-    } else {
-      final List<Color> bgColors = [
-        const Color(0xFF1E3A8A), // Blue
-        const Color(0xFF581C87), // Purple
-        const Color(0xFF701A75), // Magenta
-        const Color(0xFF065F46), // Green
-      ];
-      
-      for (int i = 0; i < devices.devices.length; i++) {
-        final d = devices.devices[i];
-        final isOnline = devices.isDeviceOnline(d.id);
-        final lastSeen = devices.getDeviceLastSeenIST(d.id) ?? 'Unknown';
-        
-        String deviceText = 'Device ${i + 1}: ${d.name}\n';
-        deviceText += 'ID: ${d.id}\n';
-        deviceText += 'Status: ${isOnline ? 'ONLINE 🟢' : 'OFFLINE 🔴'}\n';
-        if (!isOnline) {
-          deviceText += 'Last Active: $lastSeen';
-        } else {
-          final messages = devices.getMessagesForDevice(d.id);
-          final lastDeviceMsg = messages.lastWhere(
-            (m) => !m.isUser,
-            orElse: () => MessageModel(id: '', text: '', timestamp: DateTime.now(), isUser: false),
-          );
-          if (lastDeviceMsg.text.isNotEmpty) {
-            deviceText += '\nTelemetry:\n${lastDeviceMsg.text}';
-          } else {
-            deviceText += '\nReady to receive commands.';
-          }
-        }
-        
-        systemStories.add(
-          StoryItem(
-            type: StoryType.text,
-            text: deviceText,
-            backgroundColor: bgColors[i % bgColors.length],
-          ),
-        );
-      }
-    }
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => StatusStoryViewer(
-          title: 'My System Status',
-          subtitle: 'Live Device Stats',
-          avatar: auth.profilePicture,
-          stories: systemStories,
-          onDelete: null,
-        ),
-      ),
-    );
-  }
-
   void _openUpdateViewer(UpdateModel update) {
     _markUpdateAsViewed(update.id);
 
@@ -427,8 +342,6 @@ class _UpdatesScreenState extends State<UpdatesScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final auth = Provider.of<AuthProvider>(context);
-    final devices = Provider.of<DeviceProvider>(context);
 
     // Separate updates into viewed and recent
     final recentUpdates = _updates.where((u) => !_viewedUpdateIds.contains(u.id)).toList();
@@ -441,60 +354,6 @@ class _UpdatesScreenState extends State<UpdatesScreen> {
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            // Status/My Status section
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                child: Row(
-                  children: [
-                    GestureDetector(
-                      onTap: () => _openMyStatusViewer(auth, devices),
-                      child: StatusRing(
-                        isViewed: false,
-                        segmentCount: 1 + (devices.devices.isEmpty ? 1 : devices.devices.length),
-                        child: auth.profilePicture != null && auth.profilePicture!.isNotEmpty
-                            ? Image.network(
-                                auth.profilePicture!,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) =>
-                                    Container(color: Colors.grey[300], child: const Icon(Icons.person, color: Colors.white)),
-                              )
-                            : Container(
-                                color: isDark ? const Color(0xFF2A3942) : Colors.grey[300],
-                                child: Icon(Icons.person, size: 28, color: isDark ? Colors.grey[400] : Colors.grey[600]),
-                              ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => _openMyStatusViewer(auth, devices),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'My Updates',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Tap to view live system diagnostics',
-                              style: TextStyle(
-                                color: isDark ? Colors.grey[400] : Colors.grey[600],
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
             // Recent Updates Header
             if (!_isLoading && _errorMsg == null && recentUpdates.isNotEmpty)
               SliverToBoxAdapter(

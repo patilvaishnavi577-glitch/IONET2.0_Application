@@ -66,6 +66,14 @@ class IONetApp extends StatelessWidget {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: themeProvider.themeMode,
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(themeProvider.fontScaleFactor),
+          ),
+          child: child!,
+        );
+      },
       home: authProvider.isAuthenticated
           ? (authProvider.isFirstTimeUser
               ? const OnboardingScreen()

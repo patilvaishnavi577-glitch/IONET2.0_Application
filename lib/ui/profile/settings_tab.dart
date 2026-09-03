@@ -130,64 +130,127 @@ class SettingsTab extends StatelessWidget {
                 } else if (themeProvider.themeMode == ThemeMode.dark) {
                   themeName = 'Dark';
                 }
-                return ListTile(
-                  leading: const Icon(Icons.brightness_6_outlined),
-                  title: const Text('Theme'),
-                  subtitle: Text(themeName),
-                  onTap: () {
-                    showDialog(
-                      context: context,
-                      builder: (dialogContext) {
-                        return AlertDialog(
-                          title: const Text('Choose Theme'),
-                          content: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              RadioListTile<ThemeMode>(
-                                title: const Text('System Default'),
-                                value: ThemeMode.system,
-                                groupValue: themeProvider.themeMode,
-                                onChanged: (value) {
-                                  if (value != null) {
-                                    themeProvider.setThemeMode(value);
-                                    Navigator.pop(dialogContext);
-                                  }
-                                },
+                return Column(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.brightness_6_outlined),
+                      title: const Text('Theme'),
+                      subtitle: Text(themeName),
+                      onTap: () {
+                        showDialog(
+                          context: context,
+                          builder: (dialogContext) {
+                            return AlertDialog(
+                              title: const Text('Choose Theme'),
+                              content: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  RadioListTile<ThemeMode>(
+                                    title: const Text('System Default'),
+                                    value: ThemeMode.system,
+                                    groupValue: themeProvider.themeMode,
+                                    onChanged: (value) {
+                                      if (value != null) {
+                                        themeProvider.setThemeMode(value);
+                                        Navigator.pop(dialogContext);
+                                      }
+                                    },
+                                  ),
+                                  RadioListTile<ThemeMode>(
+                                    title: const Text('Light'),
+                                    value: ThemeMode.light,
+                                    groupValue: themeProvider.themeMode,
+                                    onChanged: (value) {
+                                      if (value != null) {
+                                        themeProvider.setThemeMode(value);
+                                        Navigator.pop(dialogContext);
+                                      }
+                                    },
+                                  ),
+                                  RadioListTile<ThemeMode>(
+                                    title: const Text('Dark'),
+                                    value: ThemeMode.dark,
+                                    groupValue: themeProvider.themeMode,
+                                    onChanged: (value) {
+                                      if (value != null) {
+                                        themeProvider.setThemeMode(value);
+                                        Navigator.pop(dialogContext);
+                                      }
+                                    },
+                                  ),
+                                ],
                               ),
-                              RadioListTile<ThemeMode>(
-                                title: const Text('Light'),
-                                value: ThemeMode.light,
-                                groupValue: themeProvider.themeMode,
-                                onChanged: (value) {
-                                  if (value != null) {
-                                    themeProvider.setThemeMode(value);
-                                    Navigator.pop(dialogContext);
-                                  }
-                                },
-                              ),
-                              RadioListTile<ThemeMode>(
-                                title: const Text('Dark'),
-                                value: ThemeMode.dark,
-                                groupValue: themeProvider.themeMode,
-                                onChanged: (value) {
-                                  if (value != null) {
-                                    themeProvider.setThemeMode(value);
-                                    Navigator.pop(dialogContext);
-                                  }
-                                },
-                              ),
-                            ],
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(dialogContext),
-                              child: const Text('Cancel'),
-                            ),
-                          ],
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(dialogContext),
+                                  child: const Text('Cancel'),
+                                ),
+                              ],
+                            );
+                          },
                         );
                       },
-                    );
-                  },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.format_size_rounded),
+                      title: const Text('Font Size'),
+                      subtitle: Text(themeProvider.fontSize),
+                      onTap: () {
+                        showDialog(
+                          context: context,
+                          builder: (dialogContext) {
+                            return AlertDialog(
+                              title: const Text('Choose Font Size'),
+                              content: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  RadioListTile<String>(
+                                    title: const Text('Small'),
+                                    value: 'Small',
+                                    groupValue: themeProvider.fontSize,
+                                    onChanged: (value) {
+                                      if (value != null) {
+                                        themeProvider.setFontSize(value);
+                                        Navigator.pop(dialogContext);
+                                      }
+                                    },
+                                  ),
+                                  RadioListTile<String>(
+                                    title: const Text('Medium'),
+                                    value: 'Medium',
+                                    groupValue: themeProvider.fontSize,
+                                    onChanged: (value) {
+                                      if (value != null) {
+                                        themeProvider.setFontSize(value);
+                                        Navigator.pop(dialogContext);
+                                      }
+                                    },
+                                  ),
+                                  RadioListTile<String>(
+                                    title: const Text('Large'),
+                                    value: 'Large',
+                                    groupValue: themeProvider.fontSize,
+                                    onChanged: (value) {
+                                      if (value != null) {
+                                        themeProvider.setFontSize(value);
+                                        Navigator.pop(dialogContext);
+                                      }
+                                    },
+                                  ),
+                                ],
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(dialogContext),
+                                  child: const Text('Cancel'),
+                                ),
+                              ],
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ],
                 );
               },
             ),

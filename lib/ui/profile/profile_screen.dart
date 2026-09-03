@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../core/providers/auth_provider.dart';
+import '../../core/providers/theme_provider.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -188,6 +189,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 FilteringTextInputFormatter.digitsOnly,
                 LengthLimitingTextInputFormatter(10),
               ],
+            ),
+            const SizedBox(height: 16),
+            Consumer<ThemeProvider>(
+              builder: (context, themeProvider, _) {
+                return DropdownButtonFormField<String>(
+                  value: themeProvider.fontSize,
+                  decoration: const InputDecoration(
+                    labelText: 'Font Size',
+                    prefixIcon: Icon(Icons.format_size_rounded),
+                  ),
+                  items: ['Small', 'Medium', 'Large'].map((size) {
+                    return DropdownMenuItem<String>(
+                      value: size,
+                      child: Text(size),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      themeProvider.setFontSize(value);
+                    }
+                  },
+                );
+              },
             ),
             const SizedBox(height: 32),
             _isLoading

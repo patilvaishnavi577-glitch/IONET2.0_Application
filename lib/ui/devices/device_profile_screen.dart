@@ -564,6 +564,22 @@ class _DeviceProfileScreenState extends State<DeviceProfileScreen> {
                             _buildInfoRow(theme, Icons.fingerprint, 'Device ID', device.id),
                             const Divider(height: 24),
                             _buildInfoRow(theme, Icons.security, 'Access Level', displayAccessType),
+                            if (accessType.toUpperCase() == 'SHARED') ...[
+                              const Divider(height: 24),
+                              _buildInfoRow(
+                                theme,
+                                Icons.email_outlined,
+                                'Owner Email',
+                                details?['ownerEmail'] as String? ?? 'N/A',
+                              ),
+                              const Divider(height: 24),
+                              _buildInfoRow(
+                                theme,
+                                Icons.phone_android_outlined,
+                                'Owner Phone',
+                                details?['ownerPhoneNumber'] as String? ?? 'N/A',
+                              ),
+                            ],
                             const Divider(height: 24),
                             _buildInfoRow(
                               theme,
@@ -686,4 +702,5 @@ class _DeviceProfileScreenState extends State<DeviceProfileScreen> {
       ],
     );
   }
+
 }

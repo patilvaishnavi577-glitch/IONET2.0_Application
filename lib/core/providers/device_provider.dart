@@ -17,21 +17,39 @@ class DeviceProvider extends ChangeNotifier {
   bool _isLoading = false;
   WebSocket? _webSocket;
   StreamSubscription? _wsSubscription;
+  bool _isConnecting = false;
+  String? _activeConnectedDeviceId;
+  Timer? _reconnectTimer;
 
   final Map<String, String> _deviceConnectionStatus = {};
   final Map<String, String> _deviceLastSeenIST = {};
   final Map<String, Map<String, dynamic>> _deviceDetails = {};
   final Map<String, List<QuickCommandModel>> _deviceQuickCommands = {};
+  final Map<String, Map<String, dynamic>> _latestDeviceStatusData = {};
   Timer? _heartbeatTimer;
 
   String getDeviceConnectionStatus(String deviceId) => _deviceConnectionStatus[deviceId] ?? 'offline';
   bool isDeviceOnline(String deviceId) => getDeviceConnectionStatus(deviceId) == 'online';
   String? getDeviceLastSeenIST(String deviceId) => _deviceLastSeenIST[deviceId];
   Map<String, dynamic>? getDeviceDetails(String deviceId) => _deviceDetails[deviceId];
+  Map<String, dynamic>? getLatestDeviceStatusData(String deviceId) => _latestDeviceStatusData[deviceId];
   final Map<String, List<QuickCommandModel>> _customQuickCommands = {};
   
+  List<QuickCommandModel> getDeviceCommands(String deviceId) => _deviceQuickCommands[deviceId] ?? [];
+  List<QuickCommandModel> getCustomCommands(String deviceId) => _customQuickCommands[deviceId] ?? [];
+
   List<QuickCommandModel> getQuickCommands(String deviceId) {
-    return _customQuickCommands[deviceId] ?? [];
+    final custom = _customQuickCommands[deviceId] ?? [];
+    final deviceCmds = _deviceQuickCommands[deviceId] ?? [];
+    
+    final Map<String, QuickCommandModel> combined = {};
+    for (final cmd in deviceCmds) {
+      combined[cmd.message] = cmd;
+    }
+    for (final cmd in custom) {
+      combined[cmd.message] = cmd;
+    }
+    return combined.values.toList();
   }
 
   bool isCustomCommand(String deviceId, QuickCommandModel command) {
@@ -571,13 +589,34 @@ class DeviceProvider extends ChangeNotifier {
   }
 
   Future<void> connectWebSocket(String deviceId) async {
+    if (_activeConnectedDeviceId == deviceId &&
+        (_deviceConnectionStatus[deviceId] == 'online' || 
+         _deviceConnectionStatus[deviceId] == 'connecting')) {
+      debugPrint('[WEBSOCKET CONNECT] Already connected or connecting to $deviceId, skipping.');
+      return;
+    }
+
+    if (_isConnecting) {
+      debugPrint('[WEBSOCKET CONNECT] Connection attempt already in progress, skipping.');
+      return;
+    }
+
+    _isConnecting = true;
+    _activeConnectedDeviceId = deviceId;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+
     final token = await _getToken();
-    if (token == null) return;
+    if (token == null) {
+      _isConnecting = false;
+      return;
+    }
 
-    await disconnectWebSocket();
+    await disconnectWebSocket(intentional: false);
+    _activeConnectedDeviceId = deviceId;
 
-    // Call fetchDeviceById immediately to get initial lastSeen
-    await fetchDeviceById(deviceId);
+    // Call fetchDeviceById immediately to get initial lastSeen in the background
+    fetchDeviceById(deviceId);
 
     // ws://<host>:<port>/ws?deviceId=<deviceId>&type=mobile
     final wsUrlString = '${ApiConfig.wsUrl}/ws?deviceId=$deviceId&type=mobile';
@@ -611,6 +650,22 @@ class DeviceProvider extends ChangeNotifier {
           debugPrint('[WEBSOCKET RECEIVED] Data: $data');
           try {
             final Map<String, dynamic> event = jsonDecode(data);
+            
+            final parsedData = _extractDataPreservingDuplicates(
+              data,
+              event['data'] is Map ? Map<String, dynamic>.from(event['data'] as Map) : null,
+            );
+            if (parsedData.isNotEmpty) {
+              _latestDeviceStatusData[deviceId] = parsedData;
+              notifyListeners();
+            } else if (event.containsKey('data') && event['data'] is Map) {
+              _latestDeviceStatusData[deviceId] = Map<String, dynamic>.from(event['data'] as Map);
+              notifyListeners();
+            }
+
+            if (event['command'] == '/config' && event['success'] == true) {
+              sendMessage(deviceId, '/status');
+            }
             
             // If it's a heartbeat, mark online and reset 10s timer
             if (event['type'] == 'heartbeat') {
@@ -687,17 +742,12 @@ class DeviceProvider extends ChangeNotifier {
             } else {
               final List<String> lines = [];
 
-              // 1. Device ID
-              final devId = event['deviceId'] ?? event['deviceid'] ?? deviceId;
-              lines.add('Device Id : $devId');
-
-              // // 2. Firmware Version
-              // final fwVer = event['firmwareVersion'] ?? event['firmwareversion'] ?? event['version'] ?? '1.0.0';
-              // lines.add('Firmware: $fwVer');
-
-              // 3. Telemetry Data
-              final dynamic nestedData = event['data'];
-              if (nestedData is Map) {
+              // Telemetry Data (Preserving duplicate keys if present)
+              final Map<String, dynamic> nestedData = _extractDataPreservingDuplicates(
+                data,
+                event['data'] is Map ? Map<String, dynamic>.from(event['data'] as Map) : null,
+              );
+              if (nestedData.isNotEmpty) {
                 nestedData.forEach((k, v) {
                   String label = k.toString().replaceAll('_', ' ');
                   lines.add('$label: $v');
@@ -719,32 +769,6 @@ class DeviceProvider extends ChangeNotifier {
                     lines.add('$label: $v');
                   }
                 });
-              }
-
-              // 4. Commands List
-              final List<String> cmdLines = [];
-              final cmds = event['availableCommands'] ?? event['additionalCommands'];
-              if (cmds != null) {
-                if (cmds is List) {
-                  for (var item in cmds) {
-                    if (item is Map) {
-                      final cmdMsg = (item['command'] ?? item['message'] ?? '').toString();
-                      final cmdDesc = (item['description'] ?? item['label'] ?? item['title'] ?? '').toString();
-                      if (cmdMsg.isNotEmpty) {
-                        cmdLines.add('$cmdMsg : $cmdDesc');
-                      }
-                    }
-                  }
-                } else if (cmds is Map) {
-                  cmds.forEach((k, v) {
-                    cmdLines.add('$k : $v');
-                  });
-                }
-              }
-
-              if (cmdLines.isNotEmpty) {
-                lines.add(''); // Blank line before commands list
-                lines.addAll(cmdLines);
               }
 
               if (lines.isNotEmpty) {
@@ -770,37 +794,66 @@ class DeviceProvider extends ChangeNotifier {
           _deviceConnectionStatus[deviceId] = 'offline';
           _heartbeatTimer?.cancel();
           notifyListeners();
+          _scheduleAutoReconnect(deviceId);
         },
         onDone: () {
           debugPrint('[WEBSOCKET DISCONNECTED] CloseCode: ${_webSocket?.closeCode}, CloseReason: ${_webSocket?.closeReason}');
           _deviceConnectionStatus[deviceId] = 'offline';
           _heartbeatTimer?.cancel();
           notifyListeners();
+          _scheduleAutoReconnect(deviceId);
         },
       );
     } catch (e) {
       debugPrint('[WEBSOCKET CONNECTION FAILED] $e');
       _deviceConnectionStatus[deviceId] = 'offline';
       notifyListeners();
+      _scheduleAutoReconnect(deviceId);
+    } finally {
+      _isConnecting = false;
     }
   }
 
-  Future<void> disconnectWebSocket() async {
+  void _scheduleAutoReconnect(String deviceId) {
+    if (_activeConnectedDeviceId != deviceId) return;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = Timer(const Duration(seconds: 4), () {
+      if (_activeConnectedDeviceId == deviceId &&
+          _deviceConnectionStatus[deviceId] != 'online' &&
+          !_isConnecting) {
+        debugPrint('[WEBSOCKET AUTO-RECONNECT] Attempting reconnect for $deviceId');
+        connectWebSocket(deviceId);
+      }
+    });
+  }
+
+  Future<void> disconnectWebSocket({bool intentional = true}) async {
+    if (intentional) {
+      _activeConnectedDeviceId = null;
+    }
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
     _heartbeatTimer?.cancel();
-    _wsSubscription?.cancel();
+    _heartbeatTimer = null;
+    await _wsSubscription?.cancel();
     _wsSubscription = null;
     _deviceConnectionStatus.clear();
     if (_webSocket != null) {
       debugPrint('--> [WEBSOCKET CLOSE] Closing WebSocket connection');
-      await _webSocket!.close();
+      try {
+        await _webSocket!.close();
+      } catch (e) {
+        debugPrint('Error closing WebSocket: $e');
+      }
       _webSocket = null;
     }
+    _isConnecting = false;
   }
 
-  void sendMessage(String deviceId, String text) {
+  void sendMessage(String deviceId, String text, {String? displayText}) {
     final newMsg = MessageModel(
       id: 'msg_${DateTime.now().millisecondsSinceEpoch}',
-      text: text,
+      text: displayText ?? text,
       timestamp: DateTime.now(),
       isUser: true,
     );
@@ -817,6 +870,76 @@ class DeviceProvider extends ChangeNotifier {
         final responseMsg = MessageModel(
           id: 'msg_${DateTime.now().millisecondsSinceEpoch}_bot',
           text: 'Command "$text" executed successfully.',
+          timestamp: DateTime.now(),
+          isUser: false,
+        );
+        _addMessageLocally(deviceId, responseMsg);
+      });
+    }
+  }
+
+  void sendConfig(String deviceId, Map<String, dynamic> configData) {
+    // Format config details to show as local user message in the chat
+    final lines = configData.entries.map((e) => '${e.key}: ${e.value}').join('\n');
+    final displayText = 'Sent Configuration:\n$lines';
+    
+    final newMsg = MessageModel(
+      id: 'msg_${DateTime.now().millisecondsSinceEpoch}',
+      text: displayText,
+      timestamp: DateTime.now(),
+      isUser: true,
+    );
+    _addMessageLocally(deviceId, newMsg);
+
+    if (_webSocket != null && _webSocket!.readyState == WebSocket.open) {
+      final payload = jsonEncode({
+        'command': '/config',
+        'data': configData,
+      });
+      debugPrint('--> [WEBSOCKET SEND] Payload: $payload');
+      _webSocket!.add(payload);
+    } else {
+      // Mock response fallback
+      Future.delayed(const Duration(seconds: 1), () {
+        final responseMsg = MessageModel(
+          id: 'msg_${DateTime.now().millisecondsSinceEpoch}_bot',
+          text: 'Configuration saved successfully on device.',
+          timestamp: DateTime.now(),
+          isUser: false,
+        );
+        _addMessageLocally(deviceId, responseMsg);
+      });
+    }
+  }
+
+  void sendWifiSetup(String deviceId, String ssid, String password) {
+    final maskedPass = password.isEmpty ? '(none)' : '•' * password.length;
+    final displayText = 'Sent Wi-Fi Setup:\nSSID: $ssid\nPASS: $maskedPass';
+    
+    final newMsg = MessageModel(
+      id: 'msg_${DateTime.now().millisecondsSinceEpoch}',
+      text: displayText,
+      timestamp: DateTime.now(),
+      isUser: true,
+    );
+    _addMessageLocally(deviceId, newMsg);
+
+    if (_webSocket != null && _webSocket!.readyState == WebSocket.open) {
+      final payload = jsonEncode({
+        'command': '/set-up_wifi',
+        'data': {
+          'SSID': ssid,
+          'PASS': password,
+        },
+      });
+      debugPrint('--> [WEBSOCKET SEND] Payload: $payload');
+      _webSocket!.add(payload);
+    } else {
+      // Mock response fallback
+      Future.delayed(const Duration(seconds: 1), () {
+        final responseMsg = MessageModel(
+          id: 'msg_${DateTime.now().millisecondsSinceEpoch}_bot',
+          text: 'Wi-Fi configuration sent successfully to device.',
           timestamp: DateTime.now(),
           isUser: false,
         );
@@ -915,8 +1038,130 @@ class DeviceProvider extends ChangeNotifier {
     }
   }
 
+  static Map<String, dynamic> _extractDataPreservingDuplicates(dynamic rawData, Map<String, dynamic>? fallbackData) {
+    if (rawData == null) return fallbackData ?? {};
+    final String rawJson = rawData is String
+        ? rawData
+        : (rawData is List<int> ? utf8.decode(rawData) : rawData.toString());
+
+    try {
+      final dataKeyMatch = RegExp(r'"data"\s*:\s*\{').firstMatch(rawJson);
+      if (dataKeyMatch == null) {
+        return fallbackData ?? {};
+      }
+
+      final openBraceIndex = rawJson.indexOf('{', dataKeyMatch.start);
+      if (openBraceIndex == -1) {
+        return fallbackData ?? {};
+      }
+
+      // Find matching closing brace
+      int depth = 0;
+      int closeBraceIndex = -1;
+      bool inString = false;
+      bool isEscaped = false;
+
+      for (int i = openBraceIndex; i < rawJson.length; i++) {
+        final char = rawJson[i];
+        if (isEscaped) {
+          isEscaped = false;
+          continue;
+        }
+        if (char == '\\') {
+          isEscaped = true;
+          continue;
+        }
+        if (char == '"') {
+          inString = !inString;
+          continue;
+        }
+        if (!inString) {
+          if (char == '{') {
+            depth++;
+          } else if (char == '}') {
+            depth--;
+            if (depth == 0) {
+              closeBraceIndex = i;
+              break;
+            }
+          }
+        }
+      }
+
+      if (closeBraceIndex == -1) {
+        return fallbackData ?? {};
+      }
+
+      final dataContent = rawJson.substring(openBraceIndex + 1, closeBraceIndex);
+
+      // Match each "key" : "value" or numeric/boolean/null value
+      final RegExp pairRegex = RegExp(r'"([^"\\]*(?:\\.[^"\\]*)*)"\s*:\s*("(?:[^"\\]*(?:\\.[^"\\]*)*)"|[0-9.]+|true|false|null)');
+      final matches = pairRegex.allMatches(dataContent).toList();
+
+      if (matches.isEmpty) {
+        return fallbackData ?? {};
+      }
+
+      // Count total occurrences of each key first
+      final Map<String, int> totalOccurrences = {};
+      for (final match in matches) {
+        String key = match.group(1) ?? '';
+        key = key.replaceAll(r'\"', '"');
+        totalOccurrences[key] = (totalOccurrences[key] ?? 0) + 1;
+      }
+
+      final Map<String, dynamic> result = {};
+      final Map<String, int> currentCounts = {};
+
+      for (final match in matches) {
+        String key = match.group(1) ?? '';
+        key = key.replaceAll(r'\"', '"');
+
+        final rawVal = match.group(2) ?? '';
+        dynamic val;
+        if (rawVal.startsWith('"') && rawVal.endsWith('"')) {
+          val = rawVal.substring(1, rawVal.length - 1).replaceAll(r'\"', '"');
+        } else if (rawVal == 'true') {
+          val = true;
+        } else if (rawVal == 'false') {
+          val = false;
+        } else if (rawVal == 'null') {
+          val = null;
+        } else {
+          val = num.tryParse(rawVal) ?? rawVal;
+        }
+
+        currentCounts[key] = (currentCounts[key] ?? 0) + 1;
+        final currentIdx = currentCounts[key]!;
+
+        String finalKey = key;
+        if ((totalOccurrences[key] ?? 0) > 1) {
+          finalKey = '$key $currentIdx';
+        }
+
+        result[finalKey] = val;
+      }
+
+      return result;
+    } catch (e) {
+      debugPrint('Error extracting duplicate keys from raw JSON: $e');
+      return fallbackData ?? {};
+    }
+  }
+
   void _addMessageLocally(String deviceId, MessageModel newMsg) {
     if (_messages.containsKey(deviceId)) {
+      // Deduplicate: if an incoming message (isUser == false) has the identical text
+      // as the last incoming message and arrived within 2 seconds, ignore it.
+      if (!newMsg.isUser && _messages[deviceId]!.isNotEmpty) {
+        final lastMsg = _messages[deviceId]!.last;
+        if (!lastMsg.isUser &&
+            lastMsg.text == newMsg.text &&
+            newMsg.timestamp.difference(lastMsg.timestamp).inMilliseconds.abs() < 2000) {
+          debugPrint('[DEDUPLICATION] Discarding duplicate incoming message for $deviceId: ${newMsg.text.replaceAll('\n', ' ')}');
+          return;
+        }
+      }
       _messages[deviceId]!.add(newMsg);
     } else {
       _messages[deviceId] = [newMsg];
