@@ -75,64 +75,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
 
 
-  void _showAddCommandDialog(DeviceProvider provider) {
-    final labelController = TextEditingController();
-    final messageController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Add Custom Button'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: labelController,
-                decoration: const InputDecoration(
-                  labelText: 'Button Label',
-                  labelStyle: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
-                  hintText: 'Enter text displayed on button',
-                  hintStyle: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: messageController,
-                decoration: const InputDecoration(
-                  labelText: 'Command',
-                  labelStyle: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
-                  hintText: 'Enter text sent to device',
-                  hintStyle: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final label = labelController.text.trim();
-                final message = messageController.text.trim();
-                if (label.isNotEmpty && message.isNotEmpty) {
-                  provider.addDeviceQuickCommand(
-                    widget.device.id,
-                    QuickCommandModel(label: label, message: message),
-                  );
-                  Navigator.pop(context);
-                }
-              },
-              child: const Text('Add'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   void _showEditCommandDialog(DeviceProvider provider, QuickCommandModel command) {
     final labelController = TextEditingController(text: command.label);
     final messageController = TextEditingController(text: command.message);
@@ -718,7 +660,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               children: [
                 // Minimal Header
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 12, 12, 8),
+                  padding: const EdgeInsets.fromLTRB(18, 14, 18, 10),
                   child: Row(
                     children: [
                       const Icon(
@@ -732,27 +674,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const Spacer(),
-                      TextButton.icon(
-                        onPressed: () {
-                          Navigator.pop(bottomSheetContext);
-                          _showAddCommandDialog(provider);
-                        },
-                        icon: const Icon(Icons.add_rounded, size: 16, color: Color(0xFF00A884)),
-                        label: const Text(
-                          'Add',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF00A884),
-                          ),
-                        ),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
                       ),
                     ],
