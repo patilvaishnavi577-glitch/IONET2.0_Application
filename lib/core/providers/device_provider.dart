@@ -854,6 +854,7 @@ class DeviceProvider extends ChangeNotifier {
     final newMsg = MessageModel(
       id: 'msg_${DateTime.now().millisecondsSinceEpoch}',
       text: displayText ?? text,
+      command: text,
       timestamp: DateTime.now(),
       isUser: true,
     );

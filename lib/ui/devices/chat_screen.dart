@@ -61,6 +61,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _handleRefresh(DeviceProvider provider, DeviceModel activeDevice) async {
+    final status = provider.getDeviceConnectionStatus(activeDevice.id);
+    if (status != 'online') {
+      provider.connectWebSocket(activeDevice.id);
+      await Future.delayed(const Duration(milliseconds: 600));
+    }
+    provider.sendMessage(activeDevice.id, '/status', displayText: 'Get device status');
+    await provider.fetchDeviceById(activeDevice.id);
+  }
+
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
@@ -291,87 +301,95 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         ? activeDevice.name.trim().split(' ').map((e) => e[0]).take(2).join().toUpperCase()
         : 'DV';
 
-    return Center(
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              CircleAvatar(
-                radius: 54,
-                backgroundColor: isDark 
-                    ? theme.colorScheme.surfaceContainerHighest 
-                    : theme.colorScheme.surfaceVariant,
-                child: Text(
-                  initials,
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white : Colors.black87,
-                  ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: IntrinsicHeight(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    CircleAvatar(
+                      radius: 54,
+                      backgroundColor: isDark 
+                          ? theme.colorScheme.surfaceContainerHighest 
+                          : theme.colorScheme.surfaceVariant,
+                      child: Text(
+                        initials,
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      'Start chat with ${activeDevice.name}',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Text(
+                        'Request a live status report to see device data\nand available commands.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: isDark ? Colors.grey[400] : Colors.grey[600],
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    ElevatedButton.icon(
+                      onPressed: isLive ? () => _sendMessage('/status', 'Get device status') : null,
+                      icon: const Icon(Icons.show_chart_rounded, size: 20),
+                      label: const Text(
+                        'Get device status',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        backgroundColor: const Color(0xFF00A884),
+                        disabledForegroundColor: isDark ? Colors.grey[600] : Colors.grey[400],
+                        disabledBackgroundColor: isDark 
+                            ? theme.colorScheme.surfaceContainerHighest 
+                            : theme.colorScheme.surfaceVariant,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                      ),
+                    ),
+                    if (!isLive) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        connStatus == 'connecting' ? 'Connecting...' : 'Waiting for connection...',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontStyle: FontStyle.italic,
+                          color: isDark ? Colors.grey[500] : Colors.grey[500],
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-              const SizedBox(height: 24),
-              Text(
-                'Start chat with ${activeDevice.name}',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : Colors.black87,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: Text(
-                  'Request a live status report to see device data\nand available commands.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: isDark ? Colors.grey[400] : Colors.grey[600],
-                    height: 1.4,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 32),
-              ElevatedButton.icon(
-                onPressed: isLive ? () => _sendMessage('/status', 'Get device status') : null,
-                icon: const Icon(Icons.show_chart_rounded, size: 20),
-                label: const Text(
-                  'Get device status',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                ),
-                style: ElevatedButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  backgroundColor: const Color(0xFF00A884),
-                  disabledForegroundColor: isDark ? Colors.grey[600] : Colors.grey[400],
-                  disabledBackgroundColor: isDark 
-                      ? theme.colorScheme.surfaceContainerHighest 
-                      : theme.colorScheme.surfaceVariant,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                ),
-              ),
-              if (!isLive) ...[
-                const SizedBox(height: 16),
-                Text(
-                  connStatus == 'connecting' ? 'Connecting...' : 'Waiting for connection...',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontStyle: FontStyle.italic,
-                    color: isDark ? Colors.grey[500] : Colors.grey[500],
-                  ),
-                ),
-              ],
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -517,32 +535,71 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           return Column(
             children: [
               Expanded(
-                child: messages.isEmpty
-                    ? _buildWelcomeView(context, activeDevice, provider)
-                    : ListView.builder(
-                        controller: _scrollController,
-                        reverse: true,
-                        padding: const EdgeInsets.all(16),
-                        itemCount: messages.length,
-                        itemBuilder: (context, index) {
-                          final reversed = messages.reversed.toList();
-                          final msg = reversed[index];
-                          return Align(
-                            alignment: msg.isUser ? Alignment.centerRight : Alignment.centerLeft,
-                            child: Container(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                              decoration: BoxDecoration(
-                                color: msg.isUser 
-                                    ? Theme.of(context).colorScheme.primary 
-                                    : Theme.of(context).colorScheme.surfaceContainerHighest,
-                                borderRadius: BorderRadius.circular(20),
+                child: RefreshIndicator(
+                  color: const Color(0xFF00A884),
+                  onRefresh: () => _handleRefresh(provider, activeDevice),
+                  child: messages.isEmpty
+                      ? _buildWelcomeView(context, activeDevice, provider)
+                      : ListView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          controller: _scrollController,
+                          reverse: true,
+                          padding: const EdgeInsets.all(16),
+                          itemCount: messages.length,
+                          itemBuilder: (context, index) {
+                            final reversed = messages.reversed.toList();
+                            final msg = reversed[index];
+                            final isResendable = msg.isUser &&
+                                !msg.text.startsWith('Sent Configuration:') &&
+                                !msg.text.startsWith('Sent Wi-Fi Setup:');
+
+                            return Align(
+                              alignment: msg.isUser ? Alignment.centerRight : Alignment.centerLeft,
+                              child: Container(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                child: Material(
+                                  color: msg.isUser 
+                                      ? Theme.of(context).colorScheme.primary 
+                                      : Theme.of(context).colorScheme.surfaceContainerHighest,
+                                  borderRadius: BorderRadius.circular(20),
+                                  clipBehavior: Clip.antiAlias,
+                                  child: InkWell(
+                                    onTap: isResendable
+                                        ? () {
+                                            final cmd = msg.command ?? msg.text;
+                                            final display = msg.text;
+                                            _sendMessage(cmd, display);
+                                            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                            
+                                          }
+                                        : null,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment: CrossAxisAlignment.center,
+                                        children: [
+                                          Flexible(
+                                            child: _buildFormattedMessage(context, msg.text, msg.isUser),
+                                          ),
+                                          if (isResendable) ...[
+                                            const SizedBox(width: 6),
+                                            Icon(
+                                              Icons.replay_rounded,
+                                              size: 13,
+                                              color: theme.colorScheme.onPrimary.withOpacity(0.7),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               ),
-                              child: _buildFormattedMessage(context, msg.text, msg.isUser),
-                            ),
-                          );
-                        },
-                      ),
+                            );
+                          },
+                        ),
+                ),
               ),
               SafeArea(
                 child: Padding(
