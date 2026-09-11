@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/providers/device_provider.dart';
+import '../../core/utils/app_feedback.dart';
 import 'onboarding_screen.dart';
 import '../devices/home_screen.dart';
 
@@ -22,9 +23,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _sendOtp() async {
     if (_emailController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your email')),
-      );
+      AppFeedback.showError(context, 'Please enter your email');
       return;
     }
     setState(() => _isLoading = true);
@@ -35,26 +34,21 @@ class _LoginScreenState extends State<LoginScreen> {
         _isLoading = false;
         _otpSent = true;
       });
+      AppFeedback.showSuccess(context, 'OTP sent to your email.');
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
-      );
+      AppFeedback.showError(context, e);
     }
   }
 
   void _verifyOtp() async {
     if (_emailController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your email')),
-      );
+      AppFeedback.showError(context, 'Please enter your email');
       return;
     }
     if (_otpController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter the OTP')),
-      );
+      AppFeedback.showError(context, 'Please enter the OTP');
       return;
     }
     setState(() => _isLoading = true);
@@ -80,17 +74,20 @@ class _LoginScreenState extends State<LoginScreen> {
           );
         }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Invalid OTP. Please try again.')),
-        );
+        AppFeedback.showError(context, 'Invalid OTP. Please try again.');
       }
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
-      );
+      AppFeedback.showError(context, e);
     }
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _otpController.dispose();
+    super.dispose();
   }
 
   @override

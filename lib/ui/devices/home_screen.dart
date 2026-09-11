@@ -3,8 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../core/errors/app_exceptions.dart';
+import '../../core/errors/error_handler.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/providers/device_provider.dart';
+import '../../core/utils/app_feedback.dart';
 import '../support/help_screen.dart';
 import 'chat_screen.dart';
 import 'scanner_screen.dart';
@@ -41,168 +44,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showAddDeviceDialog() {
-    final idController = TextEditingController();
-    final nameController = TextEditingController();
-
     showDialog(
       context: context,
-      builder: (context) {
-        String? idError;
-        String? nameError;
-        bool isAdding = false;
-
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: const Text('Add Device'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: idController,
-                    enabled: !isAdding,
-                    decoration: InputDecoration(
-                      labelText: 'Device ID',
-                      errorText: idError,
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.qr_code_scanner),
-                        onPressed: isAdding
-                            ? null
-                            : () async {
-                                final scannedCode =
-                                    await Navigator.push<String>(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) =>
-                                            const ScannerScreen(),
-                                      ),
-                                    );
-                                if (scannedCode != null) {
-                                  String targetId = scannedCode;
-                                  try {
-                                    final decoded = jsonDecode(scannedCode);
-                                    if (decoded is Map) {
-                                      if (decoded.containsKey('device_id')) {
-                                        targetId = decoded['device_id']
-                                            .toString();
-                                      } else if (decoded.containsKey(
-                                        'deviceId',
-                                      )) {
-                                        targetId = decoded['deviceId']
-                                            .toString();
-                                      }
-                                    }
-                                  } catch (_) {}
-                                  final cleanCode = targetId.replaceAll(
-                                    RegExp(r'[^a-zA-Z0-9]'),
-                                    '',
-                                  );
-                                  setState(() {
-                                    idController.text = cleanCode;
-                                    idError = null;
-                                  });
-                                }
-                              },
-                      ),
-                    ),
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9]')),
-                      LengthLimitingTextInputFormatter(12),
-                    ],
-                    onChanged: (val) {
-                      if (idError != null && val.trim().isNotEmpty) {
-                        setState(() => idError = null);
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: nameController,
-                    enabled: !isAdding,
-                    decoration: InputDecoration(
-                      labelText: 'Device Name',
-                      errorText: nameError,
-                    ),
-                    onChanged: (val) {
-                      if (nameError != null && val.trim().isNotEmpty) {
-                        setState(() => nameError = null);
-                      }
-                    },
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: isAdding ? null : () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-                isAdding
-                    ? const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 16.0),
-                        child: SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      )
-                    : ElevatedButton(
-                        onPressed: () async {
-                          final idText = idController.text.trim();
-                          final nameText = nameController.text.trim();
-
-                          setState(() {
-                            if (idText.isEmpty) {
-                              idError = 'Device ID is required';
-                            } else if (idText.length != 12) {
-                              idError = 'Device ID must be exactly 12 characters';
-                            } else {
-                              idError = null;
-                            }
-                            nameError = nameText.isEmpty
-                                ? 'Device Name is required'
-                                : null;
-                          });
-
-                          if (idError == null && nameError == null) {
-                            setState(() {
-                              isAdding = true;
-                            });
-                            try {
-                              await Provider.of<DeviceProvider>(
-                                context,
-                                listen: false,
-                              ).addDevice(idText, nameText);
-                              if (context.mounted) {
-                                Navigator.pop(context);
-                              }
-                            } catch (e) {
-                              final errMsg = e.toString().replaceAll(
-                                'Exception: ',
-                                '',
-                              );
-                              if (context.mounted) {
-                                setState(() {
-                                  isAdding = false;
-                                  if (errMsg.contains('already exists') ||
-                                      errMsg.contains('already added') ||
-                                      errMsg.contains('exists')) {
-                                    idError =
-                                        'This device is already added and cannot be added';
-                                  } else {
-                                    idError = errMsg;
-                                  }
-                                });
-                              }
-                            }
-                          }
-                        },
-                        child: const Text('Submit'),
-                      ),
-              ],
-            );
-          },
-        );
-      },
+      builder: (context) => const AddDeviceDialog(),
     );
   }
 
@@ -219,13 +63,13 @@ class _HomeScreenState extends State<HomeScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
         decoration: BoxDecoration(
           color: isSelected
-              ? theme.colorScheme.primary.withOpacity(0.15)
-              : theme.colorScheme.surfaceVariant.withOpacity(0.2),
+              ? theme.colorScheme.primary.withValues(alpha: 0.15)
+              : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.2),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: isSelected
                 ? theme.colorScheme.primary
-                : theme.colorScheme.outlineVariant.withOpacity(0.4),
+                : theme.colorScheme.outlineVariant.withValues(alpha: 0.4),
             width: 1.2,
           ),
         ),
@@ -263,12 +107,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 decoration: BoxDecoration(
                   color: Theme.of(
                     context,
-                  ).colorScheme.surfaceVariant.withOpacity(0.2),
+                  ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: Theme.of(
                       context,
-                    ).colorScheme.outlineVariant.withOpacity(0.4),
+                    ).colorScheme.outlineVariant.withValues(alpha: 0.4),
                     width: 1.2,
                   ),
                 ),
@@ -285,7 +129,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     hintStyle: TextStyle(
                       color: Theme.of(
                         context,
-                      ).colorScheme.onSurfaceVariant.withOpacity(0.7),
+                      ).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
                       fontSize: 13,
                     ),
                     prefixIcon: Padding(
@@ -294,7 +138,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         Icons.search_rounded,
                         color: Theme.of(
                           context,
-                        ).colorScheme.onSurfaceVariant.withOpacity(0.7),
+                        ).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
                         size: 18,
                       ),
                     ),
@@ -319,7 +163,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 Icons.clear_rounded,
                                 color: Theme.of(
                                   context,
-                                ).colorScheme.onSurfaceVariant.withOpacity(0.7),
+                                ).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
                                 size: 18,
                               ),
                             ),
@@ -423,7 +267,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   color: Theme.of(context)
                                       .colorScheme
                                       .onSurfaceVariant
-                                      .withOpacity(0.5),
+                                      .withValues(alpha: 0.5),
                                 ),
                                 const SizedBox(height: 16),
                                 Text(
@@ -434,7 +278,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     color: Theme.of(context)
                                         .colorScheme
                                         .onSurfaceVariant
-                                        .withOpacity(0.7),
+                                        .withValues(alpha: 0.7),
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -445,7 +289,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     color: Theme.of(context)
                                         .colorScheme
                                         .onSurfaceVariant
-                                        .withOpacity(0.5),
+                                        .withValues(alpha: 0.5),
                                   ),
                                 ),
                               ],
@@ -471,7 +315,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               side: BorderSide(
                                 color: Theme.of(
                                   context,
-                                ).colorScheme.outlineVariant.withOpacity(0.3),
+                                ).colorScheme.outlineVariant.withValues(alpha: 0.3),
                                 width: 1,
                               ),
                             ),
@@ -613,7 +457,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                               color: Theme.of(context)
                                                   .colorScheme
                                                   .onSurfaceVariant
-                                                  .withOpacity(0.7),
+                                                  .withValues(alpha: 0.7),
                                             ),
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
@@ -681,12 +525,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               mode: LaunchMode.externalApplication,
                             )) {
                               if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Could not open WhatsApp channel link',
-                                    ),
-                                  ),
+                                AppFeedback.showError(
+                                  context,
+                                  'Could not open WhatsApp channel link',
                                 );
                               }
                             }
@@ -769,3 +610,168 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 }
+
+class AddDeviceDialog extends StatefulWidget {
+  const AddDeviceDialog({super.key});
+
+  @override
+  State<AddDeviceDialog> createState() => _AddDeviceDialogState();
+}
+
+class _AddDeviceDialogState extends State<AddDeviceDialog> {
+  final TextEditingController _idController = TextEditingController();
+  final TextEditingController _nameController = TextEditingController();
+  String? _idError;
+  String? _nameError;
+  bool _isAdding = false;
+
+  @override
+  void dispose() {
+    _idController.dispose();
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Add Device'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _idController,
+            enabled: !_isAdding,
+            decoration: InputDecoration(
+              labelText: 'Device ID',
+              errorText: _idError,
+              suffixIcon: IconButton(
+                icon: const Icon(Icons.qr_code_scanner),
+                onPressed: _isAdding
+                    ? null
+                    : () async {
+                        final scannedCode = await Navigator.push<String>(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ScannerScreen(),
+                          ),
+                        );
+                        if (scannedCode != null) {
+                          String targetId = scannedCode;
+                          try {
+                            final decoded = jsonDecode(scannedCode);
+                            if (decoded is Map) {
+                              if (decoded.containsKey('device_id')) {
+                                targetId = decoded['device_id'].toString();
+                              } else if (decoded.containsKey('deviceId')) {
+                                targetId = decoded['deviceId'].toString();
+                              }
+                            }
+                          } catch (_) {}
+                          final cleanCode = targetId.replaceAll(
+                            RegExp(r'[^a-zA-Z0-9]'),
+                            '',
+                          );
+                          setState(() {
+                            _idController.text = cleanCode;
+                            _idError = null;
+                          });
+                        }
+                      },
+              ),
+            ),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9]')),
+              LengthLimitingTextInputFormatter(12),
+            ],
+            onChanged: (val) {
+              if (_idError != null && val.trim().isNotEmpty) {
+                setState(() => _idError = null);
+              }
+            },
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _nameController,
+            enabled: !_isAdding,
+            decoration: InputDecoration(
+              labelText: 'Device Name',
+              errorText: _nameError,
+            ),
+            onChanged: (val) {
+              if (_nameError != null && val.trim().isNotEmpty) {
+                setState(() => _nameError = null);
+              }
+            },
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isAdding ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        _isAdding
+            ? const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16.0),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            : ElevatedButton(
+                onPressed: () async {
+                  final idText = _idController.text.trim();
+                  final nameText = _nameController.text.trim();
+
+                  setState(() {
+                    if (idText.isEmpty) {
+                      _idError = 'Device ID is required';
+                    } else if (idText.length != 12) {
+                      _idError = 'Device ID must be exactly 12 characters';
+                    } else {
+                      _idError = null;
+                    }
+                    _nameError = nameText.isEmpty ? 'Device Name is required' : null;
+                  });
+
+                  if (_idError == null && _nameError == null) {
+                    setState(() {
+                      _isAdding = true;
+                    });
+                    try {
+                      await Provider.of<DeviceProvider>(
+                        context,
+                        listen: false,
+                      ).addDevice(idText, nameText);
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                      }
+                    } catch (e) {
+                      final appErr = ErrorHandler.handle(e);
+                      final errMsg = appErr.userMessage;
+                      if (context.mounted) {
+                        setState(() {
+                          _isAdding = false;
+                          if (errMsg.contains('already exists') ||
+                              errMsg.contains('already added') ||
+                              errMsg.contains('exists')) {
+                            _idError = 'This device is already added and cannot be added';
+                          } else if (appErr is NetworkException || appErr is TimeoutAppException) {
+                            AppFeedback.showError(context, appErr);
+                          } else {
+                            _idError = errMsg;
+                          }
+                        });
+                      }
+                    }
+                  }
+                },
+                child: const Text('Submit'),
+              ),
+      ],
+    );
+  }
+}
+

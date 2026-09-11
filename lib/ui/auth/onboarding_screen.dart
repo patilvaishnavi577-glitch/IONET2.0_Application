@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../core/providers/auth_provider.dart';
+import '../../core/utils/app_feedback.dart';
 import '../devices/home_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -18,22 +19,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   void _completeProfile() async {
     if (_nameController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your name')),
-      );
+      AppFeedback.showError(context, 'Please enter your name');
       return;
     }
     final mobileText = _mobileController.text.trim();
     if (mobileText.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your phone number')),
-      );
+      AppFeedback.showError(context, 'Please enter your phone number');
       return;
     }
     if (mobileText.length != 10) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Mobile number must be exactly 10 digits.')),
-      );
+      AppFeedback.showError(context, 'Mobile number must be exactly 10 digits.');
       return;
     }
     setState(() => _isLoading = true);
@@ -51,10 +46,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
-      );
+      AppFeedback.showError(context, e);
     }
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _mobileController.dispose();
+    super.dispose();
   }
 
   @override

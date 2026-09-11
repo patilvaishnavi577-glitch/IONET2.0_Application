@@ -6,14 +6,18 @@ import 'package:mime/mime.dart';
 import 'package:http_parser/http_parser.dart';
 import '../api_config.dart';
 
+import '../errors/app_exceptions.dart';
+import '../errors/error_handler.dart';
+
 class AuthProvider extends ChangeNotifier {
+  static const Duration _timeoutDuration = Duration(seconds: 15);
   bool _isAuthenticated = false;
-  bool _isFirstTimeUser = true;
+  bool _isFirstTimeUser = false;
+  String? _token;
   String? _email;
   String? _name;
   String? _mobile;
   int _credits = 50;
-  String? _token;
   String? _profilePicture;
   String? _userId;
 
@@ -27,7 +31,7 @@ class AuthProvider extends ChangeNotifier {
   String? get profilePicture => _profilePicture;
   String? get userId => _userId;
 
-  // Logging wrapper for POST requests
+  // Logging wrapper for POST requests with timeout and error handling
   Future<http.Response> _post(String path, {Map<String, String>? headers, Object? body}) async {
     final url = Uri.parse('${ApiConfig.baseUrl}$path');
     final formattedHeaders = {
@@ -39,14 +43,20 @@ class AuthProvider extends ChangeNotifier {
     debugPrint('--> [API REQUEST] POST $url');
     if (bodyString != null) debugPrint('Body: $bodyString');
 
-    final response = await http.post(url, headers: formattedHeaders, body: bodyString);
+    try {
+      final response = await http
+          .post(url, headers: formattedHeaders, body: bodyString)
+          .timeout(_timeoutDuration);
 
-    debugPrint('<-- [API RESPONSE] ${response.statusCode} POST $url');
-    debugPrint('Response Body: ${response.body}');
-    return response;
+      debugPrint('<-- [API RESPONSE] ${response.statusCode} POST $url');
+      debugPrint('Response Body: ${response.body}');
+      return response;
+    } catch (e, stack) {
+      throw ErrorHandler.handle(e, stack);
+    }
   }
 
-  // Logging wrapper for GET requests
+  // Logging wrapper for GET requests with timeout and error handling
   Future<http.Response> _get(String path, {Map<String, String>? headers}) async {
     final url = Uri.parse('${ApiConfig.baseUrl}$path');
     final formattedHeaders = {
@@ -56,14 +66,20 @@ class AuthProvider extends ChangeNotifier {
     
     debugPrint('--> [API REQUEST] GET $url');
 
-    final response = await http.get(url, headers: formattedHeaders);
+    try {
+      final response = await http
+          .get(url, headers: formattedHeaders)
+          .timeout(_timeoutDuration);
 
-    debugPrint('<-- [API RESPONSE] ${response.statusCode} GET $url');
-    debugPrint('Response Body: ${response.body}');
-    return response;
+      debugPrint('<-- [API RESPONSE] ${response.statusCode} GET $url');
+      debugPrint('Response Body: ${response.body}');
+      return response;
+    } catch (e, stack) {
+      throw ErrorHandler.handle(e, stack);
+    }
   }
 
-  // Logging wrapper for PUT requests
+  // Logging wrapper for PUT requests with timeout and error handling
   Future<http.Response> _put(String path, {Map<String, String>? headers, Object? body}) async {
     final url = Uri.parse('${ApiConfig.baseUrl}$path');
     final formattedHeaders = {
@@ -75,14 +91,20 @@ class AuthProvider extends ChangeNotifier {
     debugPrint('--> [API REQUEST] PUT $url');
     if (bodyString != null) debugPrint('Body: $bodyString');
 
-    final response = await http.put(url, headers: formattedHeaders, body: bodyString);
+    try {
+      final response = await http
+          .put(url, headers: formattedHeaders, body: bodyString)
+          .timeout(_timeoutDuration);
 
-    debugPrint('<-- [API RESPONSE] ${response.statusCode} PUT $url');
-    debugPrint('Response Body: ${response.body}');
-    return response;
+      debugPrint('<-- [API RESPONSE] ${response.statusCode} PUT $url');
+      debugPrint('Response Body: ${response.body}');
+      return response;
+    } catch (e, stack) {
+      throw ErrorHandler.handle(e, stack);
+    }
   }
 
-  // Logging wrapper for DELETE requests
+  // Logging wrapper for DELETE requests with timeout and error handling
   Future<http.Response> _delete(String path, {Map<String, String>? headers}) async {
     final url = Uri.parse('${ApiConfig.baseUrl}$path');
     final formattedHeaders = {
@@ -92,11 +114,17 @@ class AuthProvider extends ChangeNotifier {
     
     debugPrint('--> [API REQUEST] DELETE $url');
 
-    final response = await http.delete(url, headers: formattedHeaders);
+    try {
+      final response = await http
+          .delete(url, headers: formattedHeaders)
+          .timeout(_timeoutDuration);
 
-    debugPrint('<-- [API RESPONSE] ${response.statusCode} DELETE $url');
-    debugPrint('Response Body: ${response.body}');
-    return response;
+      debugPrint('<-- [API RESPONSE] ${response.statusCode} DELETE $url');
+      debugPrint('Response Body: ${response.body}');
+      return response;
+    } catch (e, stack) {
+      throw ErrorHandler.handle(e, stack);
+    }
   }
 
   Future<void> loginWithEmail(String email) async {
@@ -108,14 +136,7 @@ class AuthProvider extends ChangeNotifier {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       _email = email.trim();
     } else {
-      String errMsg = 'Failed to request OTP';
-      try {
-        final body = jsonDecode(response.body);
-        if (body is Map && body.containsKey('message')) {
-          errMsg = body['message'].toString();
-        }
-      } catch (_) {}
-      throw Exception(errMsg);
+      ErrorHandler.parseHttpResponse(response, defaultErrorMessage: 'Failed to request OTP');
     }
   }
 
@@ -163,7 +184,6 @@ class AuthProvider extends ChangeNotifier {
         try {
           await fetchProfile();
         } catch (e) {
-          // If profile fetch fails (e.g. 404), treat user as first time.
           debugPrint('Profile fetch failed during verify: $e');
           _isFirstTimeUser = true;
         }
@@ -172,13 +192,15 @@ class AuthProvider extends ChangeNotifier {
         notifyListeners();
         return true;
       }
+    } else {
+      ErrorHandler.parseHttpResponse(response, defaultErrorMessage: 'Invalid or expired OTP');
     }
     return false;
   }
 
   Future<void> fetchProfile() async {
     if (_token == null) {
-      throw Exception('Not authenticated.');
+      throw const UnauthorizedException();
     }
 
     final response = await _get(
@@ -223,15 +245,16 @@ class AuthProvider extends ChangeNotifier {
       
       // If profile exists and has a name, they are not a first-time user.
       _isFirstTimeUser = (_name == null || _name!.isEmpty);
+      await _saveProfileLocally();
       notifyListeners();
     } else {
-      throw Exception('Failed to fetch profile: ${response.statusCode}');
+      ErrorHandler.parseHttpResponse(response, defaultErrorMessage: 'Failed to load user profile');
     }
   }
 
   Future<void> completeProfile(String name, String mobile) async {
     if (_token == null) {
-      throw Exception('Not authenticated.');
+      throw const UnauthorizedException();
     }
 
     final response = await _post(
@@ -247,22 +270,16 @@ class AuthProvider extends ChangeNotifier {
       _name = name.trim();
       _mobile = mobile.trim();
       _isFirstTimeUser = false;
+      await _saveProfileLocally();
       notifyListeners();
     } else {
-      String errMsg = 'Failed to complete profile';
-      try {
-        final body = jsonDecode(response.body);
-        if (body is Map && body.containsKey('message')) {
-          errMsg = body['message'].toString();
-        }
-      } catch (_) {}
-      throw Exception(errMsg);
+      ErrorHandler.parseHttpResponse(response, defaultErrorMessage: 'Failed to complete profile');
     }
   }
 
   Future<void> updateProfile(String name, String mobile) async {
     if (_token == null) {
-      throw Exception('Not authenticated.');
+      throw const UnauthorizedException();
     }
 
     final response = await _put(
@@ -277,22 +294,16 @@ class AuthProvider extends ChangeNotifier {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       _name = name.trim();
       _mobile = mobile.trim();
+      await _saveProfileLocally();
       notifyListeners();
     } else {
-      String errMsg = 'Failed to update profile';
-      try {
-        final body = jsonDecode(response.body);
-        if (body is Map && body.containsKey('message')) {
-          errMsg = body['message'].toString();
-        }
-      } catch (_) {}
-      throw Exception(errMsg);
+      ErrorHandler.parseHttpResponse(response, defaultErrorMessage: 'Failed to update profile');
     }
   }
 
   Future<void> uploadProfilePicture(String filePath) async {
     if (_token == null) {
-      throw Exception('Not authenticated.');
+      throw const UnauthorizedException();
     }
 
     final url = Uri.parse('${ApiConfig.baseUrl}/api/v1/users/profile-picture');
@@ -319,7 +330,7 @@ class AuthProvider extends ChangeNotifier {
         ..headers['Authorization'] = 'Bearer $_token'
         ..files.add(multipartFile);
 
-      final streamedResponse = await request.send();
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 25));
       final response = await http.Response.fromStream(streamedResponse);
 
       debugPrint('<-- [API RESPONSE] ${response.statusCode} POST $url');
@@ -328,17 +339,16 @@ class AuthProvider extends ChangeNotifier {
       if (response.statusCode >= 200 && response.statusCode < 300) {
         await fetchProfile();
       } else {
-        throw Exception('Failed to upload profile picture: ${response.statusCode}');
+        ErrorHandler.parseHttpResponse(response, defaultErrorMessage: 'Failed to upload profile picture');
       }
-    } catch (e) {
-      debugPrint('Error uploading profile picture: $e');
-      rethrow;
+    } catch (e, stack) {
+      throw ErrorHandler.handle(e, stack);
     }
   }
 
   Future<void> deleteProfilePicture() async {
     if (_token == null) {
-      throw Exception('Not authenticated.');
+      throw const UnauthorizedException();
     }
 
     final response = await _delete(
@@ -348,10 +358,49 @@ class AuthProvider extends ChangeNotifier {
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       _profilePicture = null;
+      await _saveProfileLocally();
       notifyListeners();
     } else {
-      throw Exception('Failed to delete profile picture: ${response.statusCode}');
+      ErrorHandler.parseHttpResponse(response, defaultErrorMessage: 'Failed to delete profile picture');
     }
+  }
+
+  Future<void> _saveProfileLocally() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_userId != null) await prefs.setString('user_id', _userId!);
+    if (_email != null) await prefs.setString('user_email', _email!);
+    if (_name != null) await prefs.setString('user_name', _name!);
+    if (_mobile != null) await prefs.setString('user_mobile', _mobile!);
+    await prefs.setInt('user_credits', _credits);
+    if (_profilePicture != null) {
+      await prefs.setString('user_profile_pic', _profilePicture!);
+    } else {
+      await prefs.remove('user_profile_pic');
+    }
+    await prefs.setBool('is_first_time_user', _isFirstTimeUser);
+  }
+
+  Future<void> _loadProfileLocally() async {
+    final prefs = await SharedPreferences.getInstance();
+    _userId = prefs.getString('user_id') ?? _userId;
+    _email = prefs.getString('user_email') ?? _email;
+    _name = prefs.getString('user_name') ?? _name;
+    _mobile = prefs.getString('user_mobile') ?? _mobile;
+    _credits = prefs.getInt('user_credits') ?? _credits;
+    _profilePicture = prefs.getString('user_profile_pic') ?? _profilePicture;
+    _isFirstTimeUser = prefs.getBool('is_first_time_user') ?? (_name == null || _name!.isEmpty);
+  }
+
+  Future<void> _clearProfileLocally() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('jwt_token');
+    await prefs.remove('user_id');
+    await prefs.remove('user_email');
+    await prefs.remove('user_name');
+    await prefs.remove('user_mobile');
+    await prefs.remove('user_credits');
+    await prefs.remove('user_profile_pic');
+    await prefs.remove('is_first_time_user');
   }
 
   Future<bool> tryRestoreSession() async {
@@ -359,14 +408,24 @@ class AuthProvider extends ChangeNotifier {
     final savedToken = prefs.getString('jwt_token');
     if (savedToken != null && savedToken.isNotEmpty) {
       _token = savedToken;
+      // Load cached profile data so the UI renders immediately offline
+      await _loadProfileLocally();
+      _isAuthenticated = true;
+      notifyListeners();
+
       try {
         await fetchProfile();
-        _isAuthenticated = true;
-        notifyListeners();
         return true;
       } catch (e) {
-        // Token might have expired, clear local state
-        await logout();
+        // ONLY log out if the backend explicitly rejected the token (401 Unauthorized)
+        if (e is UnauthorizedException) {
+          debugPrint('[AuthProvider] Token rejected (401). Clearing session.');
+          await logout();
+          return false;
+        }
+        // If offline (NetworkException) or timeout, retain cached credentials!
+        debugPrint('[AuthProvider] Could not refresh profile from server ($e). Preserving offline session.');
+        return true;
       }
     }
     return false;
@@ -374,7 +433,7 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> deactivateAccount() async {
     if (_token == null) {
-      throw Exception('Not authenticated.');
+      throw const UnauthorizedException();
     }
 
     final response = await _delete(
@@ -385,7 +444,7 @@ class AuthProvider extends ChangeNotifier {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       await logout();
     } else {
-      throw Exception('Failed to deactivate account.');
+      ErrorHandler.parseHttpResponse(response, defaultErrorMessage: 'Failed to deactivate account.');
     }
   }
 
@@ -398,9 +457,9 @@ class AuthProvider extends ChangeNotifier {
     _mobile = null;
     _credits = 50;
     _userId = null;
+    _profilePicture = null;
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('jwt_token');
+    await _clearProfileLocally();
     notifyListeners();
   }
 }

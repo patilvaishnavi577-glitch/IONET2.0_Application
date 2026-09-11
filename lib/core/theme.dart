@@ -73,7 +73,7 @@ class AppTheme {
     appBarTheme: const AppBarTheme(
       centerTitle: true,
       elevation: 0,
-      backgroundColor: const Color(0xFF202C33),
+      backgroundColor: Color(0xFF202C33),
       surfaceTintColor: Colors.transparent,
     ),
     cardTheme: CardThemeData(
@@ -102,7 +102,7 @@ class AppTheme {
         borderSide: const BorderSide(color: Colors.redAccent, width: 1),
       ),
       filled: true,
-      fillColor: const Color(0xFF2A3942).withOpacity(0.5),
+      fillColor: const Color(0xFF2A3942).withValues(alpha: 0.5),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/api_config.dart';
+import '../../core/errors/error_handler.dart';
 
 // -----------------------------------------------------------------------------
 // Models
@@ -200,7 +201,7 @@ class _UpdatesScreenState extends State<UpdatesScreen> {
       final response = await http.get(
         url,
         headers: {'Content-Type': 'application/json'},
-      );
+      ).timeout(const Duration(seconds: 15));
 
       debugPrint('<-- [API RESPONSE] ${response.statusCode} GET $url');
 
@@ -229,16 +230,17 @@ class _UpdatesScreenState extends State<UpdatesScreen> {
       } else {
         if (mounted) {
           setState(() {
-            _errorMsg = 'Failed to fetch updates: Status ${response.statusCode}';
+            _errorMsg = 'Unable to load updates right now. Please try again later.';
             _isLoading = false;
           });
         }
       }
-    } catch (e) {
+    } catch (e, stack) {
       debugPrint('Error fetching updates: $e');
+      final appErr = ErrorHandler.handle(e, stack);
       if (mounted) {
         setState(() {
-          _errorMsg = 'Error connecting to server. Please try again.';
+          _errorMsg = appErr.userMessage;
           _isLoading = false;
         });
       }
@@ -493,7 +495,7 @@ class _UpdatesScreenState extends State<UpdatesScreen> {
                       Icon(
                         Icons.system_update_alt_rounded,
                         size: 72,
-                        color: theme.colorScheme.primary.withOpacity(0.5),
+                        color: theme.colorScheme.primary.withValues(alpha: 0.5),
                       ),
                       const SizedBox(height: 16),
                       const Text(
@@ -749,7 +751,7 @@ class _StatusStoryViewerState extends State<StatusStoryViewer> with SingleTicker
                             borderRadius: BorderRadius.circular(4),
                             child: LinearProgressIndicator(
                               value: progress,
-                              backgroundColor: Colors.white.withOpacity(0.35),
+                              backgroundColor: Colors.white.withValues(alpha: 0.35),
                               valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
                             ),
                           );
@@ -882,7 +884,7 @@ class _StatusStoryViewerState extends State<StatusStoryViewer> with SingleTicker
                   margin: const EdgeInsets.only(bottom: 8),
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
+                    color: Colors.white.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: Colors.white24),
                   ),

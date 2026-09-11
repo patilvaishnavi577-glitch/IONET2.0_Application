@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/providers/support_provider.dart';
+import '../../core/utils/app_feedback.dart';
 import 'knowledge_device_model.dart';
 
 class KnowledgeChannelScreen extends StatelessWidget {
@@ -9,9 +10,7 @@ class KnowledgeChannelScreen extends StatelessWidget {
   const KnowledgeChannelScreen({super.key, required this.channel});
 
   void _launchUrl(BuildContext context, String title, String url) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Opening $title: $url')),
-    );
+    AppFeedback.showInfo(context, 'Opening $title');
   }
 
   @override
@@ -49,7 +48,6 @@ class KnowledgeChannelScreen extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () async {
-              final messenger = ScaffoldMessenger.of(context);
               try {
                 if (isFollowing) {
                   await supportProvider.unfollowChannel(activeChannel.id);
@@ -57,9 +55,9 @@ class KnowledgeChannelScreen extends StatelessWidget {
                   await supportProvider.followChannel(activeChannel.id);
                 }
               } catch (e) {
-                messenger.showSnackBar(
-                  SnackBar(content: Text('Action failed: $e')),
-                );
+                if (context.mounted) {
+                  AppFeedback.showError(context, e);
+                }
               }
             },
             style: TextButton.styleFrom(
@@ -75,7 +73,7 @@ class KnowledgeChannelScreen extends StatelessWidget {
         ],
       ),
       body: Container(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.3),
+        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
         child: ListView(
           padding: const EdgeInsets.all(16.0),
           children: [
@@ -118,7 +116,7 @@ class KnowledgeChannelScreen extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5),
+              color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
@@ -141,7 +139,7 @@ class KnowledgeChannelScreen extends StatelessWidget {
               color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: Theme.of(context).colorScheme.outlineVariant.withOpacity(0.3),
+                color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.3),
                 width: 1,
               ),
             ),
@@ -167,7 +165,7 @@ class KnowledgeChannelScreen extends StatelessWidget {
           color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: Theme.of(context).colorScheme.outlineVariant.withOpacity(0.3),
+            color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.3),
             width: 1,
           ),
         ),
@@ -183,7 +181,7 @@ class KnowledgeChannelScreen extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: color.withOpacity(0.12),
+                      color: color.withValues(alpha: 0.12),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(icon, color: color, size: 28),

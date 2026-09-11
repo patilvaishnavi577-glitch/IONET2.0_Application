@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/providers/device_provider.dart';
+import '../../core/utils/app_feedback.dart';
 import '../../data/models/device_model.dart';
 import '../../data/models/quick_command_model.dart';
 import 'device_profile_screen.dart';
@@ -45,19 +46,24 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     Provider.of<DeviceProvider>(context, listen: false).disconnectWebSocket(intentional: true);
+    _messageController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
+    final provider = Provider.of<DeviceProvider>(context, listen: false);
     if (state == AppLifecycleState.resumed) {
-      final provider = Provider.of<DeviceProvider>(context, listen: false);
       final status = provider.getDeviceConnectionStatus(widget.device.id);
       if (status != 'online' && status != 'connecting') {
         debugPrint('[LIFECYCLE RESUMED] Reconnecting WebSocket for device ${widget.device.id}');
         provider.connectWebSocket(widget.device.id);
       }
+    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      debugPrint('[LIFECYCLE BACKGROUNDED] Suspending WebSocket for device ${widget.device.id}');
+      provider.disconnectWebSocket(intentional: false);
     }
   }
 
@@ -86,68 +92,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
 
   void _showEditCommandDialog(DeviceProvider provider, QuickCommandModel command) {
-    final labelController = TextEditingController(text: command.label);
-    final messageController = TextEditingController(text: command.message);
-
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Edit Custom Button'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: labelController,
-                decoration: const InputDecoration(
-                  labelText: 'Button Label',
-                  labelStyle: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
-                  hintText: 'Enter text displayed on button',
-                  hintStyle: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: messageController,
-                decoration: const InputDecoration(
-                  labelText: 'Command',
-                  labelStyle: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
-                  hintText: 'Enter text sent to device',
-                  hintStyle: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                provider.deleteDeviceQuickCommand(widget.device.id, command);
-                Navigator.pop(context);
-              },
-              child: const Text('Delete', style: TextStyle(color: Colors.red)),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final label = labelController.text.trim();
-                final message = messageController.text.trim();
-                if (label.isNotEmpty && message.isNotEmpty) {
-                  provider.editDeviceQuickCommand(
-                    widget.device.id,
-                    command,
-                    QuickCommandModel(label: label, message: message),
-                  );
-                  Navigator.pop(context);
-                }
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        );
-      },
+      builder: (context) => EditCustomCommandDialog(
+        provider: provider,
+        deviceId: widget.device.id,
+        command: command,
+      ),
     );
   }
 
@@ -318,7 +269,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       radius: 54,
                       backgroundColor: isDark 
                           ? theme.colorScheme.surfaceContainerHighest 
-                          : theme.colorScheme.surfaceVariant,
+                          : theme.colorScheme.surfaceContainerHighest,
                       child: Text(
                         initials,
                         style: TextStyle(
@@ -365,7 +316,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         disabledForegroundColor: isDark ? Colors.grey[600] : Colors.grey[400],
                         disabledBackgroundColor: isDark 
                             ? theme.colorScheme.surfaceContainerHighest 
-                            : theme.colorScheme.surfaceVariant,
+                            : theme.colorScheme.surfaceContainerHighest,
                         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(24),
@@ -547,8 +498,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                           padding: const EdgeInsets.all(16),
                           itemCount: messages.length,
                           itemBuilder: (context, index) {
-                            final reversed = messages.reversed.toList();
-                            final msg = reversed[index];
+                            final msg = messages[messages.length - 1 - index];
                             final isResendable = msg.isUser &&
                                 !msg.text.startsWith('Sent Configuration:') &&
                                 !msg.text.startsWith('Sent Wi-Fi Setup:');
@@ -587,7 +537,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                             Icon(
                                               Icons.replay_rounded,
                                               size: 13,
-                                              color: theme.colorScheme.onPrimary.withOpacity(0.7),
+                                              color: theme.colorScheme.onPrimary.withValues(alpha: 0.7),
                                             ),
                                           ],
                                         ],
@@ -641,7 +591,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         radius: 22,
                         backgroundColor: isLive 
                             ? const Color(0xFF00A884)
-                            : (isDark ? theme.colorScheme.surfaceContainerHighest : theme.colorScheme.surfaceVariant),
+                            : (isDark ? theme.colorScheme.surfaceContainerHighest : theme.colorScheme.surfaceContainerHighest),
                         child: IconButton(
                           icon: Icon(
                             Icons.send, 
@@ -704,7 +654,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(isDark ? 0.4 : 0.12),
+                color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.12),
                 blurRadius: 18,
                 offset: const Offset(0, -2),
               ),
@@ -937,7 +887,7 @@ class _DeviceConfigDialogState extends State<DeviceConfigDialog> {
           Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: const Color(0xFF00A884).withOpacity(0.12),
+              color: const Color(0xFF00A884).withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
             child: const Icon(Icons.tune_rounded, color: Color(0xFF00A884), size: 20),
@@ -1069,9 +1019,7 @@ class _DeviceConfigDialogState extends State<DeviceConfigDialog> {
                   FocusManager.instance.primaryFocus?.unfocus();
                   Navigator.pop(context);
                   
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Configuration command sent successfully')),
-                  );
+                  AppFeedback.showSuccess(context, 'Configuration command sent successfully');
                 },
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF00A884),
@@ -1223,15 +1171,107 @@ class _WifiSetupDialogState extends State<WifiSetupDialog> {
             FocusManager.instance.primaryFocus?.unfocus();
             Navigator.pop(context);
 
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Wi-Fi setup command sent successfully')),
-            );
+            AppFeedback.showSuccess(context, 'Wi-Fi setup command sent successfully');
           },
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF00A884),
             foregroundColor: Colors.white,
           ),
           child: const Text('Send'),
+        ),
+      ],
+    );
+  }
+}
+
+class EditCustomCommandDialog extends StatefulWidget {
+  final DeviceProvider provider;
+  final String deviceId;
+  final QuickCommandModel command;
+
+  const EditCustomCommandDialog({
+    super.key,
+    required this.provider,
+    required this.deviceId,
+    required this.command,
+  });
+
+  @override
+  State<EditCustomCommandDialog> createState() => _EditCustomCommandDialogState();
+}
+
+class _EditCustomCommandDialogState extends State<EditCustomCommandDialog> {
+  late final TextEditingController _labelController;
+  late final TextEditingController _messageController;
+
+  @override
+  void initState() {
+    super.initState();
+    _labelController = TextEditingController(text: widget.command.label);
+    _messageController = TextEditingController(text: widget.command.message);
+  }
+
+  @override
+  void dispose() {
+    _labelController.dispose();
+    _messageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Edit Custom Button'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _labelController,
+            decoration: const InputDecoration(
+              labelText: 'Button Label',
+              labelStyle: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+              hintText: 'Enter text displayed on button',
+              hintStyle: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _messageController,
+            decoration: const InputDecoration(
+              labelText: 'Command',
+              labelStyle: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+              hintText: 'Enter text sent to device',
+              hintStyle: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () {
+            widget.provider.deleteDeviceQuickCommand(widget.deviceId, widget.command);
+            Navigator.pop(context);
+          },
+          child: const Text('Delete', style: TextStyle(color: Colors.red)),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            final label = _labelController.text.trim();
+            final message = _messageController.text.trim();
+            if (label.isNotEmpty && message.isNotEmpty) {
+              widget.provider.editDeviceQuickCommand(
+                widget.deviceId,
+                widget.command,
+                QuickCommandModel(label: label, message: message),
+              );
+              Navigator.pop(context);
+            }
+          },
+          child: const Text('Save'),
         ),
       ],
     );

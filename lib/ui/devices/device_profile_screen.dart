@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../core/providers/device_provider.dart';
+import '../../core/utils/app_feedback.dart';
 import '../../data/models/device_model.dart';
 
 class DeviceProfileScreen extends StatefulWidget {
@@ -27,7 +28,6 @@ class _DeviceProfileScreenState extends State<DeviceProfileScreen> {
   }
 
   Future<void> _pickAndUploadImage(DeviceModel device) async {
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
     final provider = Provider.of<DeviceProvider>(context, listen: false);
 
     try {
@@ -43,13 +43,13 @@ class _DeviceProfileScreenState extends State<DeviceProfileScreen> {
       setState(() => _isLoading = true);
       await provider.uploadDeviceImage(device.id, pickedFile.path);
 
-      scaffoldMessenger.showSnackBar(
-        const SnackBar(content: Text('Device picture updated successfully')),
-      );
+      if (mounted) {
+        AppFeedback.showSuccess(context, 'Device picture updated successfully');
+      }
     } catch (e) {
-      scaffoldMessenger.showSnackBar(
-        SnackBar(content: Text('Error uploading image: $e')),
-      );
+      if (mounted) {
+        AppFeedback.showError(context, e);
+      }
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -58,20 +58,19 @@ class _DeviceProfileScreenState extends State<DeviceProfileScreen> {
   }
 
   Future<void> _deleteImage(DeviceModel device) async {
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
     final provider = Provider.of<DeviceProvider>(context, listen: false);
 
     try {
       setState(() => _isLoading = true);
       await provider.deleteDeviceImage(device.id);
 
-      scaffoldMessenger.showSnackBar(
-        const SnackBar(content: Text('Device picture deleted successfully')),
-      );
+      if (mounted) {
+        AppFeedback.showSuccess(context, 'Device picture deleted successfully');
+      }
     } catch (e) {
-      scaffoldMessenger.showSnackBar(
-        SnackBar(content: Text('Error removing image: $e')),
-      );
+      if (mounted) {
+        AppFeedback.showError(context, e);
+      }
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -79,55 +78,50 @@ class _DeviceProfileScreenState extends State<DeviceProfileScreen> {
     }
   }
 
-  void _showEditNameDialog(BuildContext context, DeviceModel device) {
+  void _showEditNameDialog(DeviceModel device) {
     final controller = TextEditingController(text: device.name);
     final formKey = GlobalKey<FormState>();
 
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Change Device Name'),
+          title: const Text('Edit Device Name'),
           content: Form(
             key: formKey,
             child: TextFormField(
               controller: controller,
               decoration: const InputDecoration(
                 labelText: 'Device Name',
-                hintText: 'Enter new device name',
+                border: OutlineInputBorder(),
               ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Device name cannot be empty';
-                }
-                return null;
-              },
+              validator: (val) =>
+                  (val == null || val.trim().isEmpty) ? 'Please enter a name' : null,
             ),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(dialogContext),
               child: const Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () async {
                 if (formKey.currentState?.validate() ?? false) {
                   final newName = controller.text.trim();
-                  Navigator.pop(context);
+                  Navigator.pop(dialogContext);
                   
-                  final scaffoldMessenger = ScaffoldMessenger.of(context);
                   setState(() => _isLoading = true);
                   
                   try {
                     await Provider.of<DeviceProvider>(context, listen: false)
                         .updateDeviceName(device.id, newName);
-                    scaffoldMessenger.showSnackBar(
-                      const SnackBar(content: Text('Device name updated successfully')),
-                    );
+                    if (mounted) {
+                      AppFeedback.showSuccess(context, 'Device name updated successfully');
+                    }
                   } catch (e) {
-                    scaffoldMessenger.showSnackBar(
-                      SnackBar(content: Text('Failed to update device name: $e')),
-                    );
+                    if (mounted) {
+                      AppFeedback.showError(context, e);
+                    }
                   } finally {
                     if (mounted) {
                       setState(() => _isLoading = false);
@@ -140,7 +134,7 @@ class _DeviceProfileScreenState extends State<DeviceProfileScreen> {
           ],
         );
       },
-    );
+    ).then((_) => controller.dispose());
   }
 
   void _showShareDeviceDialog(DeviceModel device) {
@@ -240,7 +234,7 @@ class _DeviceProfileScreenState extends State<DeviceProfileScreen> {
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
+                          color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
@@ -275,15 +269,11 @@ class _DeviceProfileScreenState extends State<DeviceProfileScreen> {
                             await provider.fetchDeviceDetails(widget.deviceId);
                             if (context.mounted) {
                               Navigator.pop(context);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Device shared successfully.')),
-                              );
+                              AppFeedback.showSuccess(context, 'Device shared successfully.');
                             }
                           } catch (e) {
                             if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Failed to share device: $e')),
-                              );
+                              AppFeedback.showError(context, e);
                             }
                           } finally {
                             setDialogState(() => isSharing = false);
@@ -302,7 +292,7 @@ class _DeviceProfileScreenState extends State<DeviceProfileScreen> {
           },
         );
       },
-    );
+    ).then((_) => searchController.dispose());
   }
 
   Future<void> _confirmUnshare(DeviceModel device, String userId, String userName) async {
@@ -334,15 +324,11 @@ class _DeviceProfileScreenState extends State<DeviceProfileScreen> {
         await provider.unshareDevice(device.id, userId);
         await provider.fetchDeviceDetails(widget.deviceId);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Unshared successfully.')),
-          );
+          AppFeedback.showSuccess(context, 'Unshared successfully.');
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error unsharing: $e')),
-          );
+          AppFeedback.showError(context, e);
         }
       } finally {
         if (mounted) {
@@ -354,9 +340,7 @@ class _DeviceProfileScreenState extends State<DeviceProfileScreen> {
 
   void _showImageOptions(DeviceModel device) {
     if (!device.isOwner) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Only the owner can upload or remove device images.')),
-      );
+      AppFeedback.showInfo(context, 'Only the owner can upload or remove device images.');
       return;
     }
 
@@ -459,12 +443,12 @@ class _DeviceProfileScreenState extends State<DeviceProfileScreen> {
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
                                   border: Border.all(
-                                    color: theme.colorScheme.primary.withOpacity(0.2),
+                                    color: theme.colorScheme.primary.withValues(alpha: 0.2),
                                     width: 4,
                                   ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withOpacity(0.2),
+                                      color: Colors.black.withValues(alpha: 0.2),
                                       blurRadius: 10,
                                       spreadRadius: 2,
                                     ),
@@ -516,7 +500,7 @@ class _DeviceProfileScreenState extends State<DeviceProfileScreen> {
                           const SizedBox(width: 4),
                           IconButton(
                             icon: const Icon(Icons.edit, size: 20),
-                            onPressed: () => _showEditNameDialog(context, device),
+                            onPressed: () => _showEditNameDialog(device),
                             constraints: const BoxConstraints(),
                             padding: const EdgeInsets.all(4),
                             tooltip: 'Edit Name',
@@ -656,7 +640,7 @@ class _DeviceProfileScreenState extends State<DeviceProfileScreen> {
               ),
               if (_isLoading)
                 Container(
-                  color: Colors.black.withOpacity(0.3),
+                  color: Colors.black.withValues(alpha: 0.3),
                   child: const Center(
                     child: CircularProgressIndicator(),
                   ),
@@ -684,7 +668,7 @@ class _DeviceProfileScreenState extends State<DeviceProfileScreen> {
   Widget _buildInfoRow(ThemeData theme, IconData icon, String label, String value) {
     return Row(
       children: [
-        Icon(icon, color: theme.colorScheme.primary.withOpacity(0.8), size: 22),
+        Icon(icon, color: theme.colorScheme.primary.withValues(alpha: 0.8), size: 22),
         const SizedBox(width: 16),
         Expanded(
           child: Column(

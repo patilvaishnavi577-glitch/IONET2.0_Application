@@ -7,11 +7,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mime/mime.dart';
 import 'package:http_parser/http_parser.dart';
 import '../api_config.dart';
+import '../errors/app_exceptions.dart';
+import '../errors/error_handler.dart';
 import '../../data/models/device_model.dart';
 import '../../data/models/message_model.dart';
 import '../../data/models/quick_command_model.dart';
 
 class DeviceProvider extends ChangeNotifier {
+  static const Duration _timeoutDuration = Duration(seconds: 15);
   List<DeviceModel> _devices = [];
   final Map<String, List<MessageModel>> _messages = {};
   bool _isLoading = false;
@@ -170,14 +173,38 @@ class DeviceProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  DeviceProvider() {
-    // Attempt initial load
-    fetchDevices();
-  }
+  DeviceProvider();
 
   Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('jwt_token');
+  }
+
+  Future<void> _saveDevicesLocally(List<dynamic> list) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('cached_devices', jsonEncode(list));
+    } catch (e) {
+      debugPrint('Error saving devices locally: $e');
+    }
+  }
+
+  Future<void> loadCachedDevices() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cached = prefs.getString('cached_devices');
+      if (cached != null && cached.isNotEmpty) {
+        final decoded = jsonDecode(cached);
+        if (decoded is List) {
+          _devices = decoded
+              .map((json) => DeviceModel.fromJson(json as Map<String, dynamic>))
+              .toList();
+          notifyListeners();
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading cached devices: $e');
+    }
   }
 
   Future<void> fetchDevices({String? type}) async {
@@ -185,6 +212,10 @@ class DeviceProvider extends ChangeNotifier {
     if (token == null) {
       debugPrint('[DeviceProvider] Token is null, skipping device fetch.');
       return;
+    }
+
+    if (_devices.isEmpty) {
+      await loadCachedDevices();
     }
 
     _isLoading = true;
@@ -200,7 +231,7 @@ class DeviceProvider extends ChangeNotifier {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
-      );
+      ).timeout(_timeoutDuration);
 
       debugPrint('--> [API REQUEST] GET $url');
       debugPrint('<-- [API RESPONSE] ${response.statusCode} GET $url');
@@ -214,17 +245,18 @@ class DeviceProvider extends ChangeNotifier {
         } else if (decoded is Map && decoded['data'] is List) {
           list = decoded['data'];
         } else if (decoded is Map) {
-          // If the profile endpoint is in some other shape, try common ones
           final possibleList = decoded['devices'] ?? decoded['results'];
           if (possibleList is List) {
             list = possibleList;
           }
         }
         
-        _devices = list.map((json) => DeviceModel.fromJson(json)).toList();
+        _devices = list.map((json) => DeviceModel.fromJson(json as Map<String, dynamic>)).toList();
+        await _saveDevicesLocally(list);
       }
-    } catch (e) {
+    } catch (e, stack) {
       debugPrint('Error fetching devices: $e');
+      ErrorHandler.handle(e, stack);
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -242,7 +274,7 @@ class DeviceProvider extends ChangeNotifier {
 
   Future<void> addDevice(String id, String name) async {
     final token = await _getToken();
-    if (token == null) throw Exception('Not authenticated');
+    if (token == null) throw const UnauthorizedException();
 
     _isLoading = true;
     notifyListeners();
@@ -258,7 +290,7 @@ class DeviceProvider extends ChangeNotifier {
           'deviceId': id.trim(),
           'deviceName': name.trim(),
         }),
-      );
+      ).timeout(_timeoutDuration);
 
       debugPrint('--> [API REQUEST] POST ${ApiConfig.baseUrl}/api/v1/devices');
       debugPrint('<-- [API RESPONSE] ${response.statusCode} POST ${ApiConfig.baseUrl}/api/v1/devices');
@@ -280,18 +312,11 @@ class DeviceProvider extends ChangeNotifier {
           ];
         }
       } else {
-        String errMsg = 'Failed to add device';
-        try {
-          final body = jsonDecode(response.body);
-          if (body is Map && body.containsKey('message')) {
-            errMsg = body['message'].toString();
-          }
-        } catch (_) {}
-        throw Exception(errMsg);
+        ErrorHandler.parseHttpResponse(response, defaultErrorMessage: 'Failed to add device');
       }
-    } catch (e) {
+    } catch (e, stack) {
       debugPrint('Error adding device: $e');
-      rethrow;
+      throw ErrorHandler.handle(e, stack);
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -300,7 +325,7 @@ class DeviceProvider extends ChangeNotifier {
 
   Future<void> deleteDevice(String id, {String? userId}) async {
     final token = await _getToken();
-    if (token == null) throw Exception('Not authenticated');
+    if (token == null) throw const UnauthorizedException();
 
     _isLoading = true;
     notifyListeners();
@@ -322,7 +347,7 @@ class DeviceProvider extends ChangeNotifier {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $token',
           },
-        );
+        ).timeout(_timeoutDuration);
 
         if (getDeviceResponse.statusCode == 200) {
           final decoded = jsonDecode(getDeviceResponse.body);
@@ -330,10 +355,11 @@ class DeviceProvider extends ChangeNotifier {
             final fetchedMongoId = decoded['data']['id']?.toString() ?? device.mongoId;
             url = '${ApiConfig.baseUrl}/api/v1/devices/$fetchedMongoId/share';
           } else {
-            throw Exception('Failed to retrieve device details for unsharing.');
+            throw const ValidationException('Failed to retrieve device details for unsharing.');
           }
         } else {
-          throw Exception('Failed to fetch device details.');
+          ErrorHandler.parseHttpResponse(getDeviceResponse, defaultErrorMessage: 'Failed to fetch device details.');
+          return;
         }
       }
 
@@ -343,7 +369,7 @@ class DeviceProvider extends ChangeNotifier {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
-      );
+      ).timeout(_timeoutDuration);
 
       debugPrint('--> [API REQUEST] DELETE $url');
       debugPrint('<-- [API RESPONSE] ${response.statusCode} DELETE $url');
@@ -353,18 +379,14 @@ class DeviceProvider extends ChangeNotifier {
         _devices.removeWhere((d) => d.id == id);
         _messages.remove(id);
       } else {
-        String errMsg = device.isOwner ? 'Failed to delete device' : 'Failed to leave device';
-        try {
-          final body = jsonDecode(response.body);
-          if (body is Map && body.containsKey('message')) {
-            errMsg = body['message'].toString();
-          }
-        } catch (_) {}
-        throw Exception(errMsg);
+        ErrorHandler.parseHttpResponse(
+          response,
+          defaultErrorMessage: device.isOwner ? 'Failed to delete device' : 'Failed to leave device',
+        );
       }
-    } catch (e) {
+    } catch (e, stack) {
       debugPrint('Error deleting/leaving device: $e');
-      rethrow;
+      throw ErrorHandler.handle(e, stack);
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -373,7 +395,7 @@ class DeviceProvider extends ChangeNotifier {
 
   Future<void> updateDeviceName(String id, String newName) async {
     final token = await _getToken();
-    if (token == null) throw Exception('Not authenticated');
+    if (token == null) throw const UnauthorizedException();
 
     _isLoading = true;
     notifyListeners();
@@ -390,7 +412,7 @@ class DeviceProvider extends ChangeNotifier {
         body: jsonEncode({
           'deviceName': newName.trim(),
         }),
-      );
+      ).timeout(_timeoutDuration);
 
       debugPrint('--> [API REQUEST] PUT $url');
       debugPrint('<-- [API RESPONSE] ${response.statusCode} PUT $url');
@@ -403,18 +425,11 @@ class DeviceProvider extends ChangeNotifier {
         }
         notifyListeners();
       } else {
-        String errMsg = 'Failed to update device name';
-        try {
-          final body = jsonDecode(response.body);
-          if (body is Map && body.containsKey('message')) {
-            errMsg = body['message'].toString();
-          }
-        } catch (_) {}
-        throw Exception(errMsg);
+        ErrorHandler.parseHttpResponse(response, defaultErrorMessage: 'Failed to update device name');
       }
-    } catch (e) {
+    } catch (e, stack) {
       debugPrint('Error updating device name: $e');
-      rethrow;
+      throw ErrorHandler.handle(e, stack);
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -424,7 +439,7 @@ class DeviceProvider extends ChangeNotifier {
   Future<void> uploadDeviceImage(String deviceId, String filePath) async {
     final token = await _getToken();
     if (token == null) {
-      throw Exception('Not authenticated.');
+      throw const UnauthorizedException();
     }
 
     final url = Uri.parse('${ApiConfig.baseUrl}/api/v1/devices/$deviceId/image');
@@ -454,7 +469,7 @@ class DeviceProvider extends ChangeNotifier {
         ..headers['Authorization'] = 'Bearer $token'
         ..files.add(multipartFile);
 
-      final streamedResponse = await request.send();
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 25));
       final response = await http.Response.fromStream(streamedResponse);
 
       debugPrint('<-- [API RESPONSE] ${response.statusCode} POST $url');
@@ -464,11 +479,11 @@ class DeviceProvider extends ChangeNotifier {
         await fetchDevices();
         await fetchDeviceDetails(deviceId);
       } else {
-        throw Exception('Failed to upload device image: ${response.statusCode}');
+        ErrorHandler.parseHttpResponse(response, defaultErrorMessage: 'Failed to upload device image');
       }
-    } catch (e) {
+    } catch (e, stack) {
       debugPrint('Error uploading device image: $e');
-      rethrow;
+      throw ErrorHandler.handle(e, stack);
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -478,7 +493,7 @@ class DeviceProvider extends ChangeNotifier {
   Future<void> deleteDeviceImage(String deviceId) async {
     final token = await _getToken();
     if (token == null) {
-      throw Exception('Not authenticated.');
+      throw const UnauthorizedException();
     }
 
     _isLoading = true;
@@ -491,17 +506,17 @@ class DeviceProvider extends ChangeNotifier {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
-      );
+      ).timeout(_timeoutDuration);
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         await fetchDevices();
         await fetchDeviceDetails(deviceId);
       } else {
-        throw Exception('Failed to delete device image: ${response.statusCode}');
+        ErrorHandler.parseHttpResponse(response, defaultErrorMessage: 'Failed to delete device image');
       }
-    } catch (e) {
+    } catch (e, stack) {
       debugPrint('Error deleting device image: $e');
-      rethrow;
+      throw ErrorHandler.handle(e, stack);
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -522,7 +537,7 @@ class DeviceProvider extends ChangeNotifier {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
-      );
+      ).timeout(_timeoutDuration);
 
       debugPrint('<-- [API RESPONSE] ${response.statusCode} GET $url');
       debugPrint('Response Body: ${response.body}');
@@ -534,8 +549,9 @@ class DeviceProvider extends ChangeNotifier {
           notifyListeners();
         }
       }
-    } catch (e) {
+    } catch (e, stack) {
       debugPrint('Error fetching device details: $e');
+      ErrorHandler.handle(e, stack);
     }
   }
 
@@ -553,7 +569,7 @@ class DeviceProvider extends ChangeNotifier {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
-      );
+      ).timeout(_timeoutDuration);
 
       debugPrint('<-- [API RESPONSE] ${response.statusCode} GET $url');
       debugPrint('Response Body: ${response.body}');
@@ -583,8 +599,9 @@ class DeviceProvider extends ChangeNotifier {
           }
         }
       }
-    } catch (e) {
+    } catch (e, stack) {
       debugPrint('Error fetching device by ID: $e');
+      ErrorHandler.handle(e, stack);
     }
   }
 
@@ -862,9 +879,14 @@ class DeviceProvider extends ChangeNotifier {
     _addMessageLocally(deviceId, newMsg);
 
     if (_webSocket != null && _webSocket!.readyState == WebSocket.open) {
-      final payload = jsonEncode({'command': text});
-      debugPrint('--> [WEBSOCKET SEND] Payload: $payload');
-      _webSocket!.add(payload);
+      try {
+        final payload = jsonEncode({'command': text});
+        debugPrint('--> [WEBSOCKET SEND] Payload: $payload');
+        _webSocket!.add(payload);
+      } catch (e, stack) {
+        debugPrint('--> [WEBSOCKET SEND ERROR] $e');
+        ErrorHandler.handle(e, stack);
+      }
     } else {
       // Fallback mock chatbot response
       Future.delayed(const Duration(seconds: 1), () {
@@ -893,12 +915,17 @@ class DeviceProvider extends ChangeNotifier {
     _addMessageLocally(deviceId, newMsg);
 
     if (_webSocket != null && _webSocket!.readyState == WebSocket.open) {
-      final payload = jsonEncode({
-        'command': '/config',
-        'data': configData,
-      });
-      debugPrint('--> [WEBSOCKET SEND] Payload: $payload');
-      _webSocket!.add(payload);
+      try {
+        final payload = jsonEncode({
+          'command': '/config',
+          'data': configData,
+        });
+        debugPrint('--> [WEBSOCKET SEND] Payload: $payload');
+        _webSocket!.add(payload);
+      } catch (e, stack) {
+        debugPrint('--> [WEBSOCKET SEND ERROR] $e');
+        ErrorHandler.handle(e, stack);
+      }
     } else {
       // Mock response fallback
       Future.delayed(const Duration(seconds: 1), () {
@@ -926,15 +953,20 @@ class DeviceProvider extends ChangeNotifier {
     _addMessageLocally(deviceId, newMsg);
 
     if (_webSocket != null && _webSocket!.readyState == WebSocket.open) {
-      final payload = jsonEncode({
-        'command': '/set-up_wifi',
-        'data': {
-          'SSID': ssid,
-          'PASS': password,
-        },
-      });
-      debugPrint('--> [WEBSOCKET SEND] Payload: $payload');
-      _webSocket!.add(payload);
+      try {
+        final payload = jsonEncode({
+          'command': '/set-up_wifi',
+          'data': {
+            'SSID': ssid,
+            'PASS': password,
+          },
+        });
+        debugPrint('--> [WEBSOCKET SEND] Payload: $payload');
+        _webSocket!.add(payload);
+      } catch (e, stack) {
+        debugPrint('--> [WEBSOCKET SEND ERROR] $e');
+        ErrorHandler.handle(e, stack);
+      }
     } else {
       // Mock response fallback
       Future.delayed(const Duration(seconds: 1), () {
@@ -963,7 +995,7 @@ class DeviceProvider extends ChangeNotifier {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
-      );
+      ).timeout(_timeoutDuration);
 
       debugPrint('<-- [API RESPONSE] ${response.statusCode} GET $url');
       debugPrint('Response Body: ${response.body}');
@@ -980,8 +1012,9 @@ class DeviceProvider extends ChangeNotifier {
           );
         }
       }
-    } catch (e) {
+    } catch (e, stack) {
       debugPrint('Error searching users: $e');
+      ErrorHandler.handle(e, stack);
     }
     return [];
   }
@@ -989,53 +1022,59 @@ class DeviceProvider extends ChangeNotifier {
   Future<void> shareDevice(String deviceId, String userId) async {
     final token = await _getToken();
     if (token == null) {
-      throw Exception('Not authenticated');
+      throw const UnauthorizedException();
     }
 
     final url = Uri.parse('${ApiConfig.baseUrl}/api/v1/devices/$deviceId/share');
     debugPrint('--> [API REQUEST] POST $url');
 
-    final response = await http.post(
-      url,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode({'userId': userId}),
-    );
+    try {
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({'userId': userId}),
+      ).timeout(_timeoutDuration);
 
-    debugPrint('<-- [API RESPONSE] ${response.statusCode} POST $url');
-    debugPrint('Response Body: ${response.body}');
+      debugPrint('<-- [API RESPONSE] ${response.statusCode} POST $url');
+      debugPrint('Response Body: ${response.body}');
 
-    if (response.statusCode != 200 && response.statusCode != 201) {
-      final decoded = jsonDecode(response.body);
-      throw Exception(decoded['message'] ?? 'Failed to share device.');
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        ErrorHandler.parseHttpResponse(response, defaultErrorMessage: 'Failed to share device.');
+      }
+    } catch (e, stack) {
+      throw ErrorHandler.handle(e, stack);
     }
   }
 
   Future<void> unshareDevice(String deviceId, String userId) async {
     final token = await _getToken();
     if (token == null) {
-      throw Exception('Not authenticated');
+      throw const UnauthorizedException();
     }
 
     final url = Uri.parse('${ApiConfig.baseUrl}/api/v1/devices/$deviceId/share/$userId');
     debugPrint('--> [API REQUEST] DELETE $url');
 
-    final response = await http.delete(
-      url,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
+    try {
+      final response = await http.delete(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(_timeoutDuration);
 
-    debugPrint('<-- [API RESPONSE] ${response.statusCode} DELETE $url');
-    debugPrint('Response Body: ${response.body}');
+      debugPrint('<-- [API RESPONSE] ${response.statusCode} DELETE $url');
+      debugPrint('Response Body: ${response.body}');
 
-    if (response.statusCode != 200 && response.statusCode != 204) {
-      final decoded = jsonDecode(response.body);
-      throw Exception(decoded['message'] ?? 'Failed to unshare device.');
+      if (response.statusCode != 200 && response.statusCode != 204) {
+        ErrorHandler.parseHttpResponse(response, defaultErrorMessage: 'Failed to unshare device.');
+      }
+    } catch (e, stack) {
+      throw ErrorHandler.handle(e, stack);
     }
   }
 
@@ -1177,4 +1216,36 @@ class DeviceProvider extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  Future<void> clearSession() async {
+    await disconnectWebSocket(intentional: true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('cached_devices');
+    } catch (e) {
+      debugPrint('Error clearing cached devices: $e');
+    }
+    _devices.clear();
+    _messages.clear();
+    _deviceConnectionStatus.clear();
+    _deviceLastSeenIST.clear();
+    _deviceDetails.clear();
+    _deviceQuickCommands.clear();
+    _latestDeviceStatusData.clear();
+    _customQuickCommands.clear();
+    _activeConnectedDeviceId = null;
+    _isConnecting = false;
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _reconnectTimer?.cancel();
+    _heartbeatTimer?.cancel();
+    _wsSubscription?.cancel();
+    _webSocket?.close();
+    super.dispose();
+  }
 }
+

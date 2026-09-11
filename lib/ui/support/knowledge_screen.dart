@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/providers/support_provider.dart';
+import '../../core/utils/app_feedback.dart';
 import 'knowledge_device_model.dart';
 import 'knowledge_channel_screen.dart';
 
@@ -111,7 +112,7 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: Theme.of(context).colorScheme.outlineVariant.withOpacity(0.3),
+          color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.3),
           width: 1,
         ),
       ),
@@ -151,7 +152,7 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
                     Text(
                       '${device.followers} followers', 
                       style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.7),
+                        color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
                         fontSize: 13,
                       ),
                     ),
@@ -161,13 +162,12 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
               if (!isFollowing) ...[
                 TextButton(
                   onPressed: () async {
-                    final messenger = ScaffoldMessenger.of(context);
                     try {
                       await provider.followChannel(device.id);
                     } catch (e) {
-                      messenger.showSnackBar(
-                        SnackBar(content: Text('Action failed: $e')),
-                      );
+                      if (mounted) {
+                        AppFeedback.showError(context, e);
+                      }
                     }
                   },
                   style: TextButton.styleFrom(
@@ -183,7 +183,7 @@ class _KnowledgeScreenState extends State<KnowledgeScreen> {
               ],
               Icon(
                 Icons.chevron_right_rounded, 
-                color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.4),
+                color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
               ),
             ],
           ),

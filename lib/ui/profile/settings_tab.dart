@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/providers/theme_provider.dart';
+import '../../core/providers/device_provider.dart';
+import '../../core/providers/support_provider.dart';
 import 'profile_screen.dart';
 import '../auth/login_screen.dart';
 import '../../api_route_path.dart';
@@ -142,43 +144,31 @@ class SettingsTab extends StatelessWidget {
                           builder: (dialogContext) {
                             return AlertDialog(
                               title: const Text('Choose Theme'),
-                              content: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  RadioListTile<ThemeMode>(
-                                    title: const Text('System Default'),
-                                    value: ThemeMode.system,
-                                    groupValue: themeProvider.themeMode,
-                                    onChanged: (value) {
-                                      if (value != null) {
-                                        themeProvider.setThemeMode(value);
-                                        Navigator.pop(dialogContext);
-                                      }
-                                    },
-                                  ),
-                                  RadioListTile<ThemeMode>(
-                                    title: const Text('Light'),
-                                    value: ThemeMode.light,
-                                    groupValue: themeProvider.themeMode,
-                                    onChanged: (value) {
-                                      if (value != null) {
-                                        themeProvider.setThemeMode(value);
-                                        Navigator.pop(dialogContext);
-                                      }
-                                    },
-                                  ),
-                                  RadioListTile<ThemeMode>(
-                                    title: const Text('Dark'),
-                                    value: ThemeMode.dark,
-                                    groupValue: themeProvider.themeMode,
-                                    onChanged: (value) {
-                                      if (value != null) {
-                                        themeProvider.setThemeMode(value);
-                                        Navigator.pop(dialogContext);
-                                      }
-                                    },
-                                  ),
-                                ],
+                              content: RadioGroup<ThemeMode>(
+                                groupValue: themeProvider.themeMode,
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    themeProvider.setThemeMode(value);
+                                    Navigator.pop(dialogContext);
+                                  }
+                                },
+                                child: const Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    RadioListTile<ThemeMode>(
+                                      title: Text('System Default'),
+                                      value: ThemeMode.system,
+                                    ),
+                                    RadioListTile<ThemeMode>(
+                                      title: Text('Light'),
+                                      value: ThemeMode.light,
+                                    ),
+                                    RadioListTile<ThemeMode>(
+                                      title: Text('Dark'),
+                                      value: ThemeMode.dark,
+                                    ),
+                                  ],
+                                ),
                               ),
                               actions: [
                                 TextButton(
@@ -201,43 +191,31 @@ class SettingsTab extends StatelessWidget {
                           builder: (dialogContext) {
                             return AlertDialog(
                               title: const Text('Choose Font Size'),
-                              content: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  RadioListTile<String>(
-                                    title: const Text('Small'),
-                                    value: 'Small',
-                                    groupValue: themeProvider.fontSize,
-                                    onChanged: (value) {
-                                      if (value != null) {
-                                        themeProvider.setFontSize(value);
-                                        Navigator.pop(dialogContext);
-                                      }
-                                    },
-                                  ),
-                                  RadioListTile<String>(
-                                    title: const Text('Medium'),
-                                    value: 'Medium',
-                                    groupValue: themeProvider.fontSize,
-                                    onChanged: (value) {
-                                      if (value != null) {
-                                        themeProvider.setFontSize(value);
-                                        Navigator.pop(dialogContext);
-                                      }
-                                    },
-                                  ),
-                                  RadioListTile<String>(
-                                    title: const Text('Large'),
-                                    value: 'Large',
-                                    groupValue: themeProvider.fontSize,
-                                    onChanged: (value) {
-                                      if (value != null) {
-                                        themeProvider.setFontSize(value);
-                                        Navigator.pop(dialogContext);
-                                      }
-                                    },
-                                  ),
-                                ],
+                              content: RadioGroup<String>(
+                                groupValue: themeProvider.fontSize,
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    themeProvider.setFontSize(value);
+                                    Navigator.pop(dialogContext);
+                                  }
+                                },
+                                child: const Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    RadioListTile<String>(
+                                      title: Text('Small'),
+                                      value: 'Small',
+                                    ),
+                                    RadioListTile<String>(
+                                      title: Text('Medium'),
+                                      value: 'Medium',
+                                    ),
+                                    RadioListTile<String>(
+                                      title: Text('Large'),
+                                      value: 'Large',
+                                    ),
+                                  ],
+                                ),
                               ),
                               actions: [
                                 TextButton(
@@ -276,6 +254,14 @@ class SettingsTab extends StatelessWidget {
                         ElevatedButton(
                           onPressed: () {
                             Navigator.pop(context);
+                            Provider.of<DeviceProvider>(
+                              context,
+                              listen: false,
+                            ).clearSession();
+                            Provider.of<SupportProvider>(
+                              context,
+                              listen: false,
+                            ).clearSession();
                             Provider.of<AuthProvider>(
                               context,
                               listen: false,
@@ -308,7 +294,7 @@ class SettingsTab extends StatelessWidget {
                   fontSize: 12,
                   color: Theme.of(
                     context,
-                  ).colorScheme.onSurfaceVariant.withOpacity(0.5),
+                  ).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
                   fontWeight: FontWeight.w500,
                 ),
               ),

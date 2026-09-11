@@ -29,15 +29,11 @@ void main() async {
   
   // Try to restore user session from local storage
   final authProvider = AuthProvider();
-  final hasSession = await authProvider.tryRestoreSession();
+  await authProvider.tryRestoreSession();
 
   final deviceProvider = DeviceProvider();
+  await deviceProvider.loadCachedDevices();
   final supportProvider = SupportProvider();
-  if (hasSession) {
-    await deviceProvider.fetchDevices();
-    await supportProvider.fetchChannels();
-    await supportProvider.fetchSubscribedChannels();
-  }
 
   runApp(
     MultiProvider(

@@ -51,6 +51,12 @@ class _SupportChatScreenState extends State<SupportChatScreen> {
   }
 
   @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Support Bot')),

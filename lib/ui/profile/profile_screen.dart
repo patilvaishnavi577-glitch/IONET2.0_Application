@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/providers/theme_provider.dart';
+import '../../core/utils/app_feedback.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -13,6 +14,7 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  late TextEditingController _emailController;
   late TextEditingController _nameController;
   late TextEditingController _mobileController;
   bool _isLoading = false;
@@ -22,12 +24,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    _emailController = TextEditingController(text: authProvider.email ?? '');
     _nameController = TextEditingController(text: authProvider.name ?? '');
     _mobileController = TextEditingController(text: authProvider.mobile ?? '');
   }
 
   @override
   void dispose() {
+    _emailController.dispose();
     _nameController.dispose();
     _mobileController.dispose();
     super.dispose();
@@ -35,7 +39,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _pickAndUploadImage() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
     try {
       final XFile? pickedFile = await _picker.pickImage(
         source: ImageSource.gallery,
@@ -49,13 +52,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() => _isLoading = true);
       await authProvider.uploadProfilePicture(pickedFile.path);
 
-      scaffoldMessenger.showSnackBar(
-        const SnackBar(content: Text('Profile picture updated successfully')),
-      );
+      if (mounted) {
+        AppFeedback.showSuccess(context, 'Profile picture updated successfully');
+      }
     } catch (e) {
-      scaffoldMessenger.showSnackBar(
-        SnackBar(content: Text('Error uploading image: $e')),
-      );
+      if (mounted) {
+        AppFeedback.showError(context, e);
+      }
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -65,18 +68,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _deleteImage() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
     try {
       setState(() => _isLoading = true);
       await authProvider.deleteProfilePicture();
 
-      scaffoldMessenger.showSnackBar(
-        const SnackBar(content: Text('Profile picture deleted successfully')),
-      );
+      if (mounted) {
+        AppFeedback.showSuccess(context, 'Profile picture deleted successfully');
+      }
     } catch (e) {
-      scaffoldMessenger.showSnackBar(
-        SnackBar(content: Text('Error deleting image: $e')),
-      );
+      if (mounted) {
+        AppFeedback.showError(context, e);
+      }
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -87,9 +89,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _saveProfile() async {
     final mobileText = _mobileController.text.trim();
     if (mobileText.length != 10) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Mobile number must be exactly 10 digits.')),
-      );
+      AppFeedback.showError(context, 'Mobile number must be exactly 10 digits.');
       return;
     }
 
@@ -100,14 +100,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         mobileText,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profile updated successfully')),
-      );
+      AppFeedback.showSuccess(context, 'Profile updated successfully');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error updating profile: $e')),
-      );
+      AppFeedback.showError(context, e);
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -162,7 +158,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
             const SizedBox(height: 24),
             TextField(
-              controller: TextEditingController(text: authProvider.email ?? 'No email provided'),
+              controller: _emailController,
               decoration: const InputDecoration(
                 labelText: 'Email',
                 prefixIcon: Icon(Icons.email_rounded),
@@ -194,7 +190,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Consumer<ThemeProvider>(
               builder: (context, themeProvider, _) {
                 return DropdownButtonFormField<String>(
-                  value: themeProvider.fontSize,
+                  initialValue: themeProvider.fontSize,
                   decoration: const InputDecoration(
                     labelText: 'Font Size',
                     prefixIcon: Icon(Icons.format_size_rounded),
