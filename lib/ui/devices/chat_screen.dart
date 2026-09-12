@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/utils/app_feedback.dart';
 import '../../data/models/device_model.dart';
+import '../../data/models/message_model.dart';
 import '../../data/models/quick_command_model.dart';
 import 'device_profile_screen.dart';
 
@@ -242,6 +243,557 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
   }
 
+  bool _isReadOnlyKey(String key) {
+    final lower = key.toLowerCase();
+    return lower.contains('version') ||
+        lower.contains('firmware') ||
+        lower == 'id' ||
+        lower == 'deviceid' ||
+        lower == 'timestamp' ||
+        lower.contains('command');
+  }
+
+  String _formatKeyLabel(String key) {
+    final withSpaces = key
+        .replaceAllMapped(RegExp(r'([a-z])([A-Z])'), (m) => '${m.group(1)} ${m.group(2)}')
+        .replaceAll('_', ' ');
+    return withSpaces
+        .split(' ')
+        .map((word) => word.isNotEmpty ? '${word[0].toUpperCase()}${word.substring(1)}' : '')
+        .join(' ');
+  }
+
+  Widget _buildResponseMessageBubble(BuildContext context, MessageModel msg) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final isSuccess = msg.isSuccess == true;
+    final color = isSuccess
+        ? (isDark ? const Color(0xFF4ADE80) : const Color(0xFF16A34A))
+        : (isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626));
+    final bgColor = isSuccess
+        ? (isDark ? const Color(0xFF064E3B).withValues(alpha: 0.3) : const Color(0xFFDCFCE7))
+        : (isDark ? const Color(0xFF7F1D1D).withValues(alpha: 0.3) : const Color(0xFFFEE2E2));
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isSuccess ? Icons.check_circle_rounded : Icons.error_outline_rounded,
+            size: 18,
+            color: color,
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              msg.text,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDataTableCard(
+    BuildContext context,
+    DeviceProvider provider,
+    DeviceModel activeDevice,
+    MessageModel msg,
+  ) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final data = msg.rawData ?? {};
+    final isLive = provider.getDeviceConnectionStatus(activeDevice.id) == 'online';
+
+    IconData headerIcon = Icons.show_chart_rounded;
+    String headerTitle = 'Device Status';
+    Widget? headerBadge;
+
+    if (msg.isEditable) {
+      headerIcon = Icons.tune_rounded;
+      headerTitle = 'Device Holding Registers';
+      if (activeDevice.isOwner) {
+        headerBadge = Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: const Color(0xFF00A884).withValues(alpha: 0.2),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: const Text(
+            'Single-Reg Write',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF00A884),
+            ),
+          ),
+        );
+      }
+    } else if (msg.command == '/about' ||
+        msg.text.toLowerCase().contains('hardwareversion') ||
+        msg.text.toLowerCase().contains('firmware')) {
+      headerIcon = Icons.info_outline_rounded;
+      headerTitle = 'Device Information';
+      headerBadge = Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: Colors.blue.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: const Text(
+          'About',
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            color: Colors.blue,
+          ),
+        ),
+      );
+    } else {
+      headerIcon = Icons.analytics_outlined;
+      headerTitle = 'Device Status';
+      headerBadge = Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: const Color(0xFF00A884).withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 5,
+              height: 5,
+              decoration: const BoxDecoration(
+                color: Color(0xFF00A884),
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 4),
+            const Text(
+              'Telemetry',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF00A884),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 360),
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E2630) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.08),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? const Color(0xFF00A884).withValues(alpha: 0.12)
+                  : const Color(0xFF00A884).withValues(alpha: 0.08),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  headerIcon,
+                  color: const Color(0xFF00A884),
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    headerTitle,
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                ),
+                ?headerBadge,
+              ],
+            ),
+          ),
+          ListView.separated(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: data.length,
+            separatorBuilder: (context, idx) => Divider(
+              height: 1,
+              thickness: 0.5,
+              color: isDark ? Colors.white10 : Colors.black12,
+            ),
+            itemBuilder: (context, index) {
+              final key = data.keys.elementAt(index);
+              final val = data[key];
+              final isReadOnly = _isReadOnlyKey(key);
+              final formattedLabel = _formatKeyLabel(key);
+              final valStr = val?.toString() ?? '';
+              final isOn = valStr.toLowerCase() == 'on';
+              final isOff = valStr.toLowerCase() == 'off';
+
+              Color? valColor;
+              if (isOn) {
+                valColor = isDark ? const Color(0xFF4ADE80) : const Color(0xFF16A34A);
+              } else if (isOff) {
+                valColor = isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626);
+              }
+
+              final canEditThisRow = msg.isEditable && activeDevice.isOwner && !isReadOnly && isLive;
+
+              return Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: canEditThisRow
+                      ? () => _showEditRegisterDialog(context, provider, activeDevice.id, key, val)
+                      : null,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                formattedLabel,
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w500,
+                                  color: isDark ? Colors.grey[300] : Colors.grey[800],
+                                ),
+                              ),
+                              if (msg.isEditable)
+                                Text(
+                                  key,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontFamily: 'monospace',
+                                    color: isDark ? Colors.grey[500] : Colors.grey[500],
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5)
+                                : Colors.grey[100],
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: valColor?.withValues(alpha: 0.4) ??
+                                  (isDark ? Colors.white10 : Colors.black12),
+                            ),
+                          ),
+                          child: Text(
+                            valStr,
+                            style: TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: valColor ?? (isDark ? Colors.white : Colors.black87),
+                            ),
+                          ),
+                        ),
+                        if (canEditThisRow) ...[
+                          const SizedBox(width: 6),
+                          Icon(
+                            Icons.edit_outlined,
+                            size: 15,
+                            color: isLive
+                                ? const Color(0xFF00A884)
+                                : (isDark ? Colors.grey[600] : Colors.grey[400]),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEditRegisterDialog(
+    BuildContext context,
+    DeviceProvider provider,
+    String deviceId,
+    String key,
+    dynamic rawValue,
+  ) {
+    final strVal = rawValue?.toString() ?? '';
+    final isAlarmOrBool = strVal.toLowerCase() == 'on' || strVal.toLowerCase() == 'off';
+    
+    // Extract number and unit
+    String initialNumber = strVal;
+    String unit = '';
+    final match = RegExp(r'^(-?\d+(?:\.\d+)?)\s*(.*)$').firstMatch(strVal.trim());
+    if (match != null && match.group(1) != null) {
+      initialNumber = match.group(1)!;
+      unit = match.group(2) ?? '';
+    }
+
+    final controller = TextEditingController(text: initialNumber);
+    String selectedAlarm = strVal.toLowerCase() == 'off' ? 'Off' : 'On';
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        final theme = Theme.of(dialogContext);
+        final isDark = theme.brightness == Brightness.dark;
+        final formattedLabel = _formatKeyLabel(key);
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 10),
+              contentPadding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF00A884).withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.edit_rounded, color: Color(0xFF00A884), size: 18),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Edit $formattedLabel',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          'Register: $key',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontFamily: 'monospace',
+                            color: isDark ? Colors.grey[400] : Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    margin: const EdgeInsets.only(bottom: 14),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4)
+                          : Colors.grey[100],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Current Value:',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark ? Colors.grey[400] : Colors.grey[600],
+                          ),
+                        ),
+                        Text(
+                          strVal,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontFamily: 'monospace',
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (isAlarmOrBool) ...[
+                    const Text(
+                      'Select State:',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: () {
+                              setDialogState(() => selectedAlarm = 'On');
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                color: selectedAlarm == 'On'
+                                    ? const Color(0xFF00A884).withValues(alpha: 0.18)
+                                    : Colors.transparent,
+                                border: Border.all(
+                                  color: selectedAlarm == 'On'
+                                      ? const Color(0xFF00A884)
+                                      : (isDark ? Colors.white12 : Colors.black12),
+                                  width: selectedAlarm == 'On' ? 1.6 : 1,
+                                ),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                'On',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: selectedAlarm == 'On'
+                                      ? (isDark ? const Color(0xFF4ADE80) : const Color(0xFF16A34A))
+                                      : (isDark ? Colors.grey[400] : Colors.grey[600]),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: () {
+                              setDialogState(() => selectedAlarm = 'Off');
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                color: selectedAlarm == 'Off'
+                                    ? Colors.redAccent.withValues(alpha: 0.18)
+                                    : Colors.transparent,
+                                border: Border.all(
+                                  color: selectedAlarm == 'Off'
+                                      ? Colors.redAccent
+                                      : (isDark ? Colors.white12 : Colors.black12),
+                                  width: selectedAlarm == 'Off' ? 1.6 : 1,
+                                ),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                'Off',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: selectedAlarm == 'Off'
+                                      ? (isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626))
+                                      : (isDark ? Colors.grey[400] : Colors.grey[600]),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ] else ...[
+                    TextField(
+                      controller: controller,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        labelText: 'New Value',
+                        suffixText: unit.isNotEmpty ? unit : null,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    FocusManager.instance.primaryFocus?.unfocus();
+                    Navigator.pop(dialogContext);
+                  },
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    dynamic valToSend;
+                    if (isAlarmOrBool) {
+                      valToSend = selectedAlarm;
+                    } else {
+                      final input = controller.text.trim();
+                      if (input.isEmpty) return;
+                      final asInt = int.tryParse(input);
+                      final asDouble = double.tryParse(input);
+                      if (asInt != null) {
+                        valToSend = asInt;
+                      } else if (asDouble != null) {
+                        valToSend = asDouble;
+                      } else {
+                        valToSend = input;
+                      }
+                    }
+
+                    provider.writeSingleRegister(deviceId, key, valToSend);
+                    FocusManager.instance.primaryFocus?.unfocus();
+                    Navigator.pop(dialogContext);
+                    AppFeedback.showSuccess(context, 'Write command sent for $formattedLabel');
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF00A884),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: const Text('Write'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildWelcomeView(BuildContext context, DeviceModel activeDevice, DeviceProvider provider) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -446,13 +998,29 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert),
               onSelected: (value) {
-                if (value == 'config') {
+                if (value == 'settings') {
+                  final status = deviceProvider.getDeviceConnectionStatus(activeDevice.id);
+                  if (status != 'online') {
+                    deviceProvider.connectWebSocket(activeDevice.id);
+                  }
+                  _sendMessage('/holding', 'Get device settings');
+                } else if (value == 'config') {
                   _showConfigurationDialog(context, deviceProvider, activeDevice);
                 } else if (value == 'wifi_setup') {
                   _showWifiSetupDialog(context, deviceProvider, activeDevice);
                 }
               },
               itemBuilder: (context) => [
+                const PopupMenuItem<String>(
+                  value: 'settings',
+                  child: Row(
+                    children: [
+                      Icon(Icons.tune_rounded, size: 20, color: Color(0xFF00A884)),
+                      SizedBox(width: 8),
+                      Text('Settings'),
+                    ],
+                  ),
+                ),
                 const PopupMenuItem<String>(
                   value: 'config',
                   child: Row(
@@ -500,8 +1068,24 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                           itemBuilder: (context, index) {
                             final msg = messages[messages.length - 1 - index];
                             final isResendable = msg.isUser &&
+                                msg.command != '/write_single_reg' &&
                                 !msg.text.startsWith('Sent Configuration:') &&
-                                !msg.text.startsWith('Sent Wi-Fi Setup:');
+                                !msg.text.startsWith('Sent Wi-Fi Setup:') &&
+                                !msg.text.startsWith('Set ');
+
+                            if (!msg.isUser && msg.rawData != null && msg.rawData!.isNotEmpty) {
+                              return Align(
+                                alignment: Alignment.centerLeft,
+                                child: _buildDataTableCard(context, provider, activeDevice, msg),
+                              );
+                            }
+
+                            if (!msg.isUser && msg.isSuccess != null) {
+                              return Align(
+                                alignment: Alignment.centerLeft,
+                                child: _buildResponseMessageBubble(context, msg),
+                              );
+                            }
 
                             return Align(
                               alignment: msg.isUser ? Alignment.centerRight : Alignment.centerLeft,
@@ -520,7 +1104,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                             final display = msg.text;
                                             _sendMessage(cmd, display);
                                             ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                                            
                                           }
                                         : null,
                                     child: Padding(

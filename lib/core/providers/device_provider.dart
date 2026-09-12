@@ -29,6 +29,8 @@ class DeviceProvider extends ChangeNotifier {
   final Map<String, Map<String, dynamic>> _deviceDetails = {};
   final Map<String, List<QuickCommandModel>> _deviceQuickCommands = {};
   final Map<String, Map<String, dynamic>> _latestDeviceStatusData = {};
+  final Map<String, String> _lastSentCommand = {};
+  final Map<String, Map<String, dynamic>> _pendingRegisterWrites = {};
   Timer? _heartbeatTimer;
 
   String getDeviceConnectionStatus(String deviceId) => _deviceConnectionStatus[deviceId] ?? 'offline';
@@ -680,6 +682,78 @@ class DeviceProvider extends ChangeNotifier {
               notifyListeners();
             }
 
+            // Check if this is a response to a command (e.g. /write_single_reg, /config, etc.)
+            final isResponse = event['type'] == 'response' ||
+                (event.containsKey('command') && event.containsKey('success'));
+            if (isResponse) {
+              _deviceConnectionStatus[deviceId] = 'online';
+              notifyListeners();
+
+              _heartbeatTimer?.cancel();
+              _heartbeatTimer = Timer(const Duration(seconds: 10), () async {
+                _deviceConnectionStatus[deviceId] = 'offline';
+                notifyListeners();
+                await fetchDeviceById(deviceId);
+              });
+
+              final isSuccess = event['success'] == true;
+              final respCmd = (event['command'] ?? '').toString();
+              final respMsg = (event['message'] ?? event['text'] ?? (isSuccess ? 'Success' : 'Failed')).toString();
+
+              if (respCmd == '/config' && isSuccess) {
+                sendMessage(deviceId, '/status');
+              }
+
+              // If /write_single_reg succeeded, update local cache and latest message's rawData
+              if (respCmd == '/write_single_reg' && isSuccess) {
+                final pending = _pendingRegisterWrites[deviceId];
+                if (pending != null) {
+                  final regKey = pending['key'] as String;
+                  final regVal = pending['value'];
+
+                  // Update _latestDeviceStatusData
+                  if (_latestDeviceStatusData.containsKey(deviceId)) {
+                    _latestDeviceStatusData[deviceId]![regKey] = regVal.toString();
+                  }
+
+                  // Also update latest message's rawData if applicable
+                  if (_messages.containsKey(deviceId)) {
+                    for (int i = _messages[deviceId]!.length - 1; i >= 0; i--) {
+                      final m = _messages[deviceId]![i];
+                      if (!m.isUser && m.rawData != null && m.rawData!.containsKey(regKey)) {
+                        final updatedData = Map<String, dynamic>.from(m.rawData!);
+                        updatedData[regKey] = regVal;
+                        _messages[deviceId]![i] = m.copyWith(rawData: updatedData);
+                        break;
+                      }
+                    }
+                  }
+                  _pendingRegisterWrites.remove(deviceId);
+                  notifyListeners();
+                }
+              }
+
+              // If the response payload contains a data object (such as /about, /holding, etc.),
+              // do NOT short-circuit into a simple "Success" text bubble!
+              // Let it proceed down so data is extracted into rawData and rendered as a table.
+              final hasResponseData = event.containsKey('data') &&
+                  event['data'] is Map &&
+                  (event['data'] as Map).isNotEmpty;
+
+              if (!hasResponseData) {
+                final responseMsg = MessageModel(
+                  id: event['id'] as String? ?? 'resp_${DateTime.now().millisecondsSinceEpoch}',
+                  text: isSuccess ? '✓ $respMsg' : '⚠️ $respMsg',
+                  timestamp: DateTime.now(),
+                  isUser: false,
+                  isSuccess: isSuccess,
+                  responseCommand: respCmd,
+                );
+                _addMessageLocally(deviceId, responseMsg);
+                return;
+              }
+            }
+
             if (event['command'] == '/config' && event['success'] == true) {
               sendMessage(deviceId, '/status');
             }
@@ -753,17 +827,18 @@ class DeviceProvider extends ChangeNotifier {
               }
             }
 
+            // Telemetry Data (Preserving duplicate keys if present)
+            final Map<String, dynamic> nestedData = _extractDataPreservingDuplicates(
+              data,
+              event['data'] is Map ? Map<String, dynamic>.from(event['data'] as Map) : null,
+            );
+
             // Determine the message text to display in the chat screen bubble (supporting flat and nested "data" formats)
             if (event.containsKey('text') || event.containsKey('message')) {
               textMsg = event['text'] as String? ?? event['message'] as String?;
             } else {
               final List<String> lines = [];
 
-              // Telemetry Data (Preserving duplicate keys if present)
-              final Map<String, dynamic> nestedData = _extractDataPreservingDuplicates(
-                data,
-                event['data'] is Map ? Map<String, dynamic>.from(event['data'] as Map) : null,
-              );
               if (nestedData.isNotEmpty) {
                 nestedData.forEach((k, v) {
                   String label = k.toString().replaceAll('_', ' ');
@@ -794,11 +869,29 @@ class DeviceProvider extends ChangeNotifier {
             }
 
             if ((hasDeviceId || hasData) && textMsg != null) {
+              final lastCmd = _lastSentCommand[deviceId] ?? '';
+              final isHolding = lastCmd == '/holding' ||
+                  lastCmd == '/settings' ||
+                  event['command'] == '/holding' ||
+                  event['command'] == '/settings';
+
+              // Reset lastSentCommand once consumed so future status telemetry stays standard
+              if (isHolding) {
+                _lastSentCommand.remove(deviceId);
+              }
+
+              final effectiveData = nestedData.isNotEmpty
+                  ? nestedData
+                  : (event['data'] is Map ? Map<String, dynamic>.from(event['data'] as Map) : null);
+
               final newMsg = MessageModel(
                 id: event['id'] as String? ?? 'ws_${DateTime.now().millisecondsSinceEpoch}',
                 text: textMsg,
+                command: event['command'] as String? ?? (lastCmd.isNotEmpty ? lastCmd : null),
                 timestamp: DateTime.now(),
                 isUser: false,
+                rawData: effectiveData,
+                isEditable: isHolding && effectiveData != null && effectiveData.isNotEmpty,
               );
               _addMessageLocally(deviceId, newMsg);
             }
@@ -868,6 +961,7 @@ class DeviceProvider extends ChangeNotifier {
   }
 
   void sendMessage(String deviceId, String text, {String? displayText}) {
+    _lastSentCommand[deviceId] = text;
     final newMsg = MessageModel(
       id: 'msg_${DateTime.now().millisecondsSinceEpoch}',
       text: displayText ?? text,
@@ -897,6 +991,70 @@ class DeviceProvider extends ChangeNotifier {
           isUser: false,
         );
         _addMessageLocally(deviceId, responseMsg);
+      });
+    }
+  }
+
+  void writeSingleRegister(String deviceId, String key, dynamic value) {
+    final formattedKey = key.replaceAll('_', ' ');
+    final displayText = 'Set $formattedKey: $value';
+    _lastSentCommand[deviceId] = '/write_single_reg';
+    _pendingRegisterWrites[deviceId] = {'key': key, 'value': value};
+
+    final newMsg = MessageModel(
+      id: 'msg_${DateTime.now().millisecondsSinceEpoch}',
+      text: displayText,
+      command: '/write_single_reg',
+      timestamp: DateTime.now(),
+      isUser: true,
+    );
+    
+    _addMessageLocally(deviceId, newMsg);
+
+    if (_webSocket != null && _webSocket!.readyState == WebSocket.open) {
+      try {
+        final payload = jsonEncode({
+          'type': '/write_single_reg',
+          'data': {key: value},
+        });
+        debugPrint('--> [WEBSOCKET SEND] Payload: $payload');
+        _webSocket!.add(payload);
+      } catch (e, stack) {
+        debugPrint('--> [WEBSOCKET SEND ERROR] $e');
+        ErrorHandler.handle(e, stack);
+      }
+    } else {
+      // Fallback mock response when running disconnected / offline
+      Future.delayed(const Duration(seconds: 1), () {
+        final responseMsg = MessageModel(
+          id: 'msg_${DateTime.now().millisecondsSinceEpoch}_bot',
+          text: '✓ Register "$formattedKey" updated to $value.',
+          timestamp: DateTime.now(),
+          isUser: false,
+          isSuccess: true,
+          responseCommand: '/write_single_reg',
+        );
+        _addMessageLocally(deviceId, responseMsg);
+
+        // Update local status cache
+        if (_latestDeviceStatusData.containsKey(deviceId)) {
+          _latestDeviceStatusData[deviceId]![key] = value.toString();
+        }
+
+        // Update latest message's rawData if available
+        if (_messages.containsKey(deviceId)) {
+          for (int i = _messages[deviceId]!.length - 1; i >= 0; i--) {
+            final m = _messages[deviceId]![i];
+            if (!m.isUser && m.rawData != null && m.rawData!.containsKey(key)) {
+              final updatedData = Map<String, dynamic>.from(m.rawData!);
+              updatedData[key] = value;
+              _messages[deviceId]![i] = m.copyWith(rawData: updatedData);
+              break;
+            }
+          }
+        }
+        _pendingRegisterWrites.remove(deviceId);
+        notifyListeners();
       });
     }
   }
@@ -1232,6 +1390,8 @@ class DeviceProvider extends ChangeNotifier {
     _deviceDetails.clear();
     _deviceQuickCommands.clear();
     _latestDeviceStatusData.clear();
+    _lastSentCommand.clear();
+    _pendingRegisterWrites.clear();
     _customQuickCommands.clear();
     _activeConnectedDeviceId = null;
     _isConnecting = false;
