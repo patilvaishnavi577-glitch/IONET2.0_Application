@@ -906,6 +906,22 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       orElse: () => widget.device,
     );
 
+    final allCommands = deviceProvider.getQuickCommands(activeDevice.id);
+    QuickCommandModel? settingsCommand;
+    for (final cmd in allCommands) {
+      final msg = cmd.message.trim().toLowerCase();
+      if (msg == '/holding' ||
+          msg == '/setting' ||
+          msg == '/settings' ||
+          msg.startsWith('/holding ') ||
+          msg.startsWith('/setting ') ||
+          msg.startsWith('/settings ')) {
+        settingsCommand = cmd;
+        break;
+      }
+    }
+    final bool hasSettingsCommand = settingsCommand != null;
+
     return Scaffold(
       appBar: AppBar(
         title: GestureDetector(
@@ -1003,7 +1019,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   if (status != 'online') {
                     deviceProvider.connectWebSocket(activeDevice.id);
                   }
-                  _sendMessage('/holding', 'Get device settings');
+                  final cmdToSend = settingsCommand?.message ?? '/holding';
+                  final labelToSend = (settingsCommand != null && settingsCommand.label.trim().isNotEmpty)
+                      ? settingsCommand.label.trim()
+                      : 'Get device settings';
+                  _sendMessage(cmdToSend, labelToSend);
                 } else if (value == 'config') {
                   _showConfigurationDialog(context, deviceProvider, activeDevice);
                 } else if (value == 'wifi_setup') {
@@ -1011,16 +1031,17 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 }
               },
               itemBuilder: (context) => [
-                const PopupMenuItem<String>(
-                  value: 'settings',
-                  child: Row(
-                    children: [
-                      Icon(Icons.tune_rounded, size: 20, color: Color(0xFF00A884)),
-                      SizedBox(width: 8),
-                      Text('Settings'),
-                    ],
+                if (hasSettingsCommand)
+                  const PopupMenuItem<String>(
+                    value: 'settings',
+                    child: Row(
+                      children: [
+                        Icon(Icons.tune_rounded, size: 20, color: Color(0xFF00A884)),
+                        SizedBox(width: 8),
+                        Text('Settings'),
+                      ],
+                    ),
                   ),
-                ),
                 const PopupMenuItem<String>(
                   value: 'config',
                   child: Row(

@@ -37,7 +37,27 @@ class DeviceProvider extends ChangeNotifier {
   bool isDeviceOnline(String deviceId) => getDeviceConnectionStatus(deviceId) == 'online';
   String? getDeviceLastSeenIST(String deviceId) => _deviceLastSeenIST[deviceId];
   Map<String, dynamic>? getDeviceDetails(String deviceId) => _deviceDetails[deviceId];
-  Map<String, dynamic>? getLatestDeviceStatusData(String deviceId) => _latestDeviceStatusData[deviceId];
+  Map<String, dynamic>? getLatestDeviceStatusData(String deviceId) {
+    if (_latestDeviceStatusData.containsKey(deviceId) &&
+        _latestDeviceStatusData[deviceId] != null &&
+        _latestDeviceStatusData[deviceId]!.isNotEmpty) {
+      return _latestDeviceStatusData[deviceId];
+    }
+    // Fallback: search backwards in chat history for the most recent /status message
+    final msgs = _messages[deviceId];
+    if (msgs != null && msgs.isNotEmpty) {
+      for (int i = msgs.length - 1; i >= 0; i--) {
+        final m = msgs[i];
+        if (!m.isUser &&
+            m.command == '/status' &&
+            m.rawData != null &&
+            m.rawData!.isNotEmpty) {
+          return m.rawData;
+        }
+      }
+    }
+    return null;
+  }
   final Map<String, List<QuickCommandModel>> _customQuickCommands = {};
   
   List<QuickCommandModel> getDeviceCommands(String deviceId) => _deviceQuickCommands[deviceId] ?? [];
@@ -674,12 +694,32 @@ class DeviceProvider extends ChangeNotifier {
               data,
               event['data'] is Map ? Map<String, dynamic>.from(event['data'] as Map) : null,
             );
-            if (parsedData.isNotEmpty) {
-              _latestDeviceStatusData[deviceId] = parsedData;
-              notifyListeners();
-            } else if (event.containsKey('data') && event['data'] is Map) {
-              _latestDeviceStatusData[deviceId] = Map<String, dynamic>.from(event['data'] as Map);
-              notifyListeners();
+
+            // Only update _latestDeviceStatusData if the incoming payload is for /status telemetry
+            final lastCmd = (_lastSentCommand[deviceId] ?? '').trim().toLowerCase();
+            final eventCmd = (event['command'] ?? '').toString().trim().toLowerCase();
+            final activeCmd = eventCmd.isNotEmpty ? eventCmd : lastCmd;
+
+            final isNonStatusCmd = activeCmd == '/holding' ||
+                activeCmd == '/setting' ||
+                activeCmd == '/settings' ||
+                activeCmd == '/about' ||
+                activeCmd == '/config' ||
+                activeCmd == '/wifi_setup' ||
+                activeCmd == '/write_single_reg' ||
+                (event['type'] == 'response' && activeCmd != '/status');
+
+            final isStatusData = !isNonStatusCmd &&
+                (activeCmd == '/status' || activeCmd.isEmpty || event['type'] == 'telemetry');
+
+            if (isStatusData) {
+              if (parsedData.isNotEmpty) {
+                _latestDeviceStatusData[deviceId] = parsedData;
+                notifyListeners();
+              } else if (event.containsKey('data') && event['data'] is Map) {
+                _latestDeviceStatusData[deviceId] = Map<String, dynamic>.from(event['data'] as Map);
+                notifyListeners();
+              }
             }
 
             // Check if this is a response to a command (e.g. /write_single_reg, /config, etc.)
@@ -704,17 +744,12 @@ class DeviceProvider extends ChangeNotifier {
                 sendMessage(deviceId, '/status');
               }
 
-              // If /write_single_reg succeeded, update local cache and latest message's rawData
+              // If /write_single_reg succeeded, update latest message's rawData
               if (respCmd == '/write_single_reg' && isSuccess) {
                 final pending = _pendingRegisterWrites[deviceId];
                 if (pending != null) {
                   final regKey = pending['key'] as String;
                   final regVal = pending['value'];
-
-                  // Update _latestDeviceStatusData
-                  if (_latestDeviceStatusData.containsKey(deviceId)) {
-                    _latestDeviceStatusData[deviceId]![regKey] = regVal.toString();
-                  }
 
                   // Also update latest message's rawData if applicable
                   if (_messages.containsKey(deviceId)) {
@@ -1035,11 +1070,6 @@ class DeviceProvider extends ChangeNotifier {
           responseCommand: '/write_single_reg',
         );
         _addMessageLocally(deviceId, responseMsg);
-
-        // Update local status cache
-        if (_latestDeviceStatusData.containsKey(deviceId)) {
-          _latestDeviceStatusData[deviceId]![key] = value.toString();
-        }
 
         // Update latest message's rawData if available
         if (_messages.containsKey(deviceId)) {
