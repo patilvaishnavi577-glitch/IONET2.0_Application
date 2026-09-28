@@ -307,7 +307,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           return Card(
                             margin: const EdgeInsets.symmetric(
                               horizontal: 16.0,
-                              vertical: 6.0,
+                              vertical: 3.0,
                             ),
                             elevation: 0,
                             shape: RoundedRectangleBorder(
@@ -380,7 +380,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 16.0,
-                                  vertical: 12.0,
+                                  vertical: 9.0,
                                 ),
                                 child: Row(
                                   children: [
@@ -642,6 +642,7 @@ class _AddDeviceDialogState extends State<AddDeviceDialog> {
           TextField(
             controller: _idController,
             enabled: !_isAdding,
+            textCapitalization: TextCapitalization.characters,
             decoration: InputDecoration(
               labelText: 'Device ID',
               errorText: _idError,
@@ -671,7 +672,7 @@ class _AddDeviceDialogState extends State<AddDeviceDialog> {
                           final cleanCode = targetId.replaceAll(
                             RegExp(r'[^a-zA-Z0-9]'),
                             '',
-                          );
+                          ).toUpperCase();
                           setState(() {
                             _idController.text = cleanCode;
                             _idError = null;
@@ -686,7 +687,13 @@ class _AddDeviceDialogState extends State<AddDeviceDialog> {
             ],
             onChanged: (val) {
               if (_idError != null && val.trim().isNotEmpty) {
-                setState(() => _idError = null);
+                if (_idError == 'Device ID must be in uppercase') {
+                  if (val == val.toUpperCase()) {
+                    setState(() => _idError = null);
+                  }
+                } else {
+                  setState(() => _idError = null);
+                }
               }
             },
           ),
@@ -730,6 +737,8 @@ class _AddDeviceDialogState extends State<AddDeviceDialog> {
                       _idError = 'Device ID is required';
                     } else if (idText.length != 12) {
                       _idError = 'Device ID must be exactly 12 characters';
+                    } else if (idText != idText.toUpperCase()) {
+                      _idError = 'Device ID must be in uppercase';
                     } else {
                       _idError = null;
                     }

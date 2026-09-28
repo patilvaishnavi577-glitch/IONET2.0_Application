@@ -275,7 +275,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         : (isDark ? const Color(0xFF7F1D1D).withValues(alpha: 0.3) : const Color(0xFFFEE2E2));
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: bgColor,
@@ -322,8 +322,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     Widget? headerBadge;
 
     if (msg.isEditable) {
+      final isSetting = msg.command == '/setting' || msg.command == '/settings';
       headerIcon = Icons.tune_rounded;
-      headerTitle = 'Device Holding Registers';
+      headerTitle = isSetting ? 'Device Setting' : 'Device Holding';
       if (activeDevice.isOwner) {
         headerBadge = Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -331,9 +332,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             color: const Color(0xFF00A884).withValues(alpha: 0.2),
             borderRadius: BorderRadius.circular(6),
           ),
-          child: const Text(
-            'Single-Reg Write',
-            style: TextStyle(
+          child: Text(
+            isSetting ? 'Setting Write' : 'Single-Reg Write',
+            style: const TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w600,
               color: Color(0xFF00A884),
@@ -397,7 +398,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
     return Container(
       constraints: const BoxConstraints(maxWidth: 360),
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E2630) : Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -457,7 +458,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             ),
             itemBuilder: (context, index) {
               final key = data.keys.elementAt(index);
-              final val = data[key];
+              final rawItem = data[key];
+              dynamic val = rawItem;
+              String? rangeStr;
+              if (rawItem is Map) {
+                val = rawItem['value'];
+                rangeStr = rawItem['range']?.toString();
+              }
+
               final isReadOnly = _isReadOnlyKey(key);
               final formattedLabel = _formatKeyLabel(key);
               final valStr = val?.toString() ?? '';
@@ -472,12 +480,21 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               }
 
               final canEditThisRow = msg.isEditable && activeDevice.isOwner && !isReadOnly && isLive;
+              final isSetting = msg.command == '/setting' || msg.command == '/settings';
 
               return Material(
                 color: Colors.transparent,
                 child: InkWell(
                   onTap: canEditThisRow
-                      ? () => _showEditRegisterDialog(context, provider, activeDevice.id, key, val)
+                      ? () => _showEditRegisterDialog(
+                            context,
+                            provider,
+                            activeDevice.id,
+                            key,
+                            rawItem,
+                            range: rangeStr,
+                            isSetting: isSetting,
+                          )
                       : null,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -495,13 +512,24 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                   color: isDark ? Colors.grey[300] : Colors.grey[800],
                                 ),
                               ),
-                              if (msg.isEditable)
-                                Text(
-                                  key,
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontFamily: 'monospace',
-                                    color: isDark ? Colors.grey[500] : Colors.grey[500],
+                              if (msg.isEditable && rangeStr != null && rangeStr.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 3),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                    decoration: BoxDecoration(
+                                      color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.06),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      'Range: $rangeStr',
+                                      style: TextStyle(
+                                        fontSize: 9.5,
+                                        fontFamily: 'monospace',
+                                        color: isDark ? const Color(0xFF4ADE80) : const Color(0xFF00897B),
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
                                   ),
                                 ),
                             ],
@@ -557,11 +585,33 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     DeviceProvider provider,
     String deviceId,
     String key,
-    dynamic rawValue,
-  ) {
-    final strVal = rawValue?.toString() ?? '';
-    final isAlarmOrBool = strVal.toLowerCase() == 'on' || strVal.toLowerCase() == 'off';
+    dynamic rawValue, {
+    String? range,
+    bool isSetting = false,
+  }) {
+    dynamic effectiveValue = rawValue;
+    String? effectiveRange = range;
+    if (rawValue is Map) {
+      effectiveValue = rawValue['value'];
+      effectiveRange ??= rawValue['range']?.toString();
+    }
+
+    final strVal = effectiveValue?.toString() ?? '';
     
+    // Parse range bounds if present (e.g. "10-20", "0-1", "0-60")
+    double? minRange;
+    double? maxRange;
+    if (effectiveRange != null && effectiveRange.trim().isNotEmpty) {
+      final rangeMatch = RegExp(r'^(-?\d+(?:\.\d+)?)\s*-\s*(-?\d+(?:\.\d+)?)$').firstMatch(effectiveRange.trim());
+      if (rangeMatch != null) {
+        minRange = double.tryParse(rangeMatch.group(1)!);
+        maxRange = double.tryParse(rangeMatch.group(2)!);
+      }
+    }
+
+    final isZeroOne = (effectiveRange?.trim() == '0-1') || (minRange == 0 && maxRange == 1);
+    final isAlarmOrBool = strVal.toLowerCase() == 'on' || strVal.toLowerCase() == 'off' || isZeroOne;
+
     // Extract number and unit
     String initialNumber = strVal;
     String unit = '';
@@ -572,7 +622,35 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     }
 
     final controller = TextEditingController(text: initialNumber);
-    String selectedAlarm = strVal.toLowerCase() == 'off' ? 'Off' : 'On';
+    final bool hasSlider = !isAlarmOrBool && minRange != null && maxRange != null && minRange < maxRange;
+    final bool isIntegerRange = hasSlider && (minRange % 1 == 0) && (maxRange % 1 == 0);
+    double currentSliderVal = (double.tryParse(initialNumber) ?? (minRange ?? 0.0)).clamp(
+      minRange ?? 0.0,
+      maxRange ?? ((minRange ?? 0.0) + 1.0),
+    );
+    String selectedState;
+    if (isZeroOne && strVal.toLowerCase() != 'on' && strVal.toLowerCase() != 'off') {
+      selectedState = (strVal == '0') ? '0' : '1';
+    } else {
+      selectedState = strVal.toLowerCase() == 'off' ? 'Off' : 'On';
+    }
+
+    String? getRangeError(String text) {
+      final trimmed = text.trim();
+      if (trimmed.isEmpty) return 'Value cannot be empty';
+      final numVal = double.tryParse(trimmed);
+      if (numVal == null) return 'Enter a valid number';
+      if (minRange != null && maxRange != null) {
+        if (numVal < minRange || numVal > maxRange) {
+          final minStr = minRange % 1 == 0 ? minRange.toInt().toString() : minRange.toString();
+          final maxStr = maxRange % 1 == 0 ? maxRange.toInt().toString() : maxRange.toString();
+          return 'Must be between $minStr and $maxStr';
+        }
+      }
+      return null;
+    }
+
+    String? rangeError = isAlarmOrBool ? null : getRangeError(initialNumber);
 
     showDialog(
       context: context,
@@ -583,6 +661,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            final bool canSubmit = isAlarmOrBool || rangeError == null;
+            final double sliderMin = minRange ?? 0.0;
+            final double sliderMax = maxRange ?? 1.0;
+
             return AlertDialog(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
               titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 10),
@@ -609,7 +691,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                           overflow: TextOverflow.ellipsis,
                         ),
                         Text(
-                          'Register: $key',
+                          '${isSetting ? 'Setting' : 'Register'}: $key',
                           style: TextStyle(
                             fontSize: 11,
                             fontFamily: 'monospace',
@@ -621,13 +703,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   ),
                 ],
               ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    margin: const EdgeInsets.only(bottom: 14),
+                    margin: const EdgeInsets.only(bottom: 10),
                     decoration: BoxDecoration(
                       color: isDark
                           ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4)
@@ -655,6 +738,35 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       ],
                     ),
                   ),
+                  if (effectiveRange != null && effectiveRange.trim().isNotEmpty) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF00A884).withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: const Color(0xFF00A884).withValues(alpha: 0.25),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.straighten_rounded, size: 15, color: Color(0xFF00A884)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Allowed Range: $effectiveRange${unit.isNotEmpty ? ' $unit' : ''}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF00A884),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   if (isAlarmOrBool) ...[
                     const Text(
                       'Select State:',
@@ -667,28 +779,30 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                           child: InkWell(
                             borderRadius: BorderRadius.circular(10),
                             onTap: () {
-                              setDialogState(() => selectedAlarm = 'On');
+                              setDialogState(() {
+                                selectedState = (isZeroOne && strVal.toLowerCase() != 'on' && strVal.toLowerCase() != 'off') ? '1' : 'On';
+                              });
                             },
                             child: Container(
                               padding: const EdgeInsets.symmetric(vertical: 10),
                               decoration: BoxDecoration(
-                                color: selectedAlarm == 'On'
+                                color: (selectedState == 'On' || selectedState == '1')
                                     ? const Color(0xFF00A884).withValues(alpha: 0.18)
                                     : Colors.transparent,
                                 border: Border.all(
-                                  color: selectedAlarm == 'On'
+                                  color: (selectedState == 'On' || selectedState == '1')
                                       ? const Color(0xFF00A884)
                                       : (isDark ? Colors.white12 : Colors.black12),
-                                  width: selectedAlarm == 'On' ? 1.6 : 1,
+                                  width: (selectedState == 'On' || selectedState == '1') ? 1.6 : 1,
                                 ),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               alignment: Alignment.center,
                               child: Text(
-                                'On',
+                                (isZeroOne && strVal.toLowerCase() != 'on' && strVal.toLowerCase() != 'off') ? '1 (On)' : 'On',
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
-                                  color: selectedAlarm == 'On'
+                                  color: (selectedState == 'On' || selectedState == '1')
                                       ? (isDark ? const Color(0xFF4ADE80) : const Color(0xFF16A34A))
                                       : (isDark ? Colors.grey[400] : Colors.grey[600]),
                                 ),
@@ -701,28 +815,30 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                           child: InkWell(
                             borderRadius: BorderRadius.circular(10),
                             onTap: () {
-                              setDialogState(() => selectedAlarm = 'Off');
+                              setDialogState(() {
+                                selectedState = (isZeroOne && strVal.toLowerCase() != 'on' && strVal.toLowerCase() != 'off') ? '0' : 'Off';
+                              });
                             },
                             child: Container(
                               padding: const EdgeInsets.symmetric(vertical: 10),
                               decoration: BoxDecoration(
-                                color: selectedAlarm == 'Off'
+                                color: (selectedState == 'Off' || selectedState == '0')
                                     ? Colors.redAccent.withValues(alpha: 0.18)
                                     : Colors.transparent,
                                 border: Border.all(
-                                  color: selectedAlarm == 'Off'
+                                  color: (selectedState == 'Off' || selectedState == '0')
                                       ? Colors.redAccent
                                       : (isDark ? Colors.white12 : Colors.black12),
-                                  width: selectedAlarm == 'Off' ? 1.6 : 1,
+                                  width: (selectedState == 'Off' || selectedState == '0') ? 1.6 : 1,
                                 ),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               alignment: Alignment.center,
                               child: Text(
-                                'Off',
+                                (isZeroOne && strVal.toLowerCase() != 'on' && strVal.toLowerCase() != 'off') ? '0 (Off)' : 'Off',
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
-                                  color: selectedAlarm == 'Off'
+                                  color: (selectedState == 'Off' || selectedState == '0')
                                       ? (isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626))
                                       : (isDark ? Colors.grey[400] : Colors.grey[600]),
                                 ),
@@ -736,18 +852,96 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                     TextField(
                       controller: controller,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                      autofocus: true,
+                      autofocus: !hasSlider,
+                      onChanged: (val) {
+                        setDialogState(() {
+                          rangeError = getRangeError(val);
+                          final typed = double.tryParse(val.trim());
+                          if (typed != null && minRange != null && maxRange != null && typed >= minRange && typed <= maxRange) {
+                            currentSliderVal = typed;
+                          }
+                        });
+                      },
                       decoration: InputDecoration(
                         labelText: 'New Value',
                         suffixText: unit.isNotEmpty ? unit : null,
+                        errorText: rangeError,
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                       ),
                     ),
+                    if (hasSlider) ...[
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Text(
+                            sliderMin % 1 == 0 ? sliderMin.toInt().toString() : sliderMin.toString(),
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontFamily: 'monospace',
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.grey[400] : Colors.grey[600],
+                            ),
+                          ),
+                          Expanded(
+                            child: SliderTheme(
+                              data: SliderTheme.of(context).copyWith(
+                                activeTrackColor: const Color(0xFF00A884),
+                                inactiveTrackColor: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.12),
+                                thumbColor: const Color(0xFF00A884),
+                                overlayColor: const Color(0xFF00A884).withValues(alpha: 0.2),
+                                valueIndicatorColor: const Color(0xFF00A884),
+                                valueIndicatorTextStyle: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              child: Slider(
+                                value: currentSliderVal.clamp(sliderMin, sliderMax),
+                                min: sliderMin,
+                                max: sliderMax,
+                                divisions: (isIntegerRange && (sliderMax - sliderMin) <= 200 && (sliderMax - sliderMin) > 0)
+                                    ? (sliderMax - sliderMin).round()
+                                    : null,
+                                label: isIntegerRange
+                                    ? '${currentSliderVal.round()}${unit.isNotEmpty ? ' $unit' : ''}'
+                                    : '${currentSliderVal.toStringAsFixed(1)}${unit.isNotEmpty ? ' $unit' : ''}',
+                                onChanged: (newVal) {
+                                  setDialogState(() {
+                                    if (isIntegerRange) {
+                                      final rounded = newVal.round();
+                                      currentSliderVal = rounded.toDouble();
+                                      controller.text = rounded.toString();
+                                    } else {
+                                      currentSliderVal = newVal;
+                                      controller.text = (newVal % 1 == 0)
+                                          ? newVal.toInt().toString()
+                                          : newVal.toStringAsFixed(1);
+                                    }
+                                    rangeError = getRangeError(controller.text);
+                                  });
+                                },
+                              ),
+                            ),
+                          ),
+                          Text(
+                            sliderMax % 1 == 0 ? sliderMax.toInt().toString() : sliderMax.toString(),
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontFamily: 'monospace',
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.grey[400] : Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ],
               ),
-              actions: [
+            ),
+            actions: [
                 TextButton(
                   onPressed: () {
                     FocusManager.instance.primaryFocus?.unfocus();
@@ -756,32 +950,45 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   child: const Text('Cancel'),
                 ),
                 ElevatedButton(
-                  onPressed: () {
-                    dynamic valToSend;
-                    if (isAlarmOrBool) {
-                      valToSend = selectedAlarm;
-                    } else {
-                      final input = controller.text.trim();
-                      if (input.isEmpty) return;
-                      final asInt = int.tryParse(input);
-                      final asDouble = double.tryParse(input);
-                      if (asInt != null) {
-                        valToSend = asInt;
-                      } else if (asDouble != null) {
-                        valToSend = asDouble;
-                      } else {
-                        valToSend = input;
-                      }
-                    }
+                  onPressed: canSubmit
+                      ? () {
+                          dynamic valToSend;
+                          if (isAlarmOrBool) {
+                            if (isZeroOne && strVal.toLowerCase() != 'on' && strVal.toLowerCase() != 'off') {
+                              valToSend = int.tryParse(selectedState) ?? selectedState;
+                            } else {
+                              valToSend = selectedState;
+                            }
+                          } else {
+                            final err = getRangeError(controller.text);
+                            if (err != null) {
+                              setDialogState(() => rangeError = err);
+                              return;
+                            }
+                            final input = controller.text.trim();
+                            if (input.isEmpty) return;
+                            final asInt = int.tryParse(input);
+                            final asDouble = double.tryParse(input);
+                            if (asInt != null) {
+                              valToSend = asInt;
+                            } else if (asDouble != null) {
+                              valToSend = asDouble;
+                            } else {
+                              valToSend = input;
+                            }
+                          }
 
-                    provider.writeSingleRegister(deviceId, key, valToSend);
-                    FocusManager.instance.primaryFocus?.unfocus();
-                    Navigator.pop(dialogContext);
-                    AppFeedback.showSuccess(context, 'Write command sent for $formattedLabel');
-                  },
+                          final writeCmd = isSetting ? '/write_setting' : '/write_holding';
+                          provider.writeSingleRegister(deviceId, key, valToSend, writeCommand: writeCmd);
+                          FocusManager.instance.primaryFocus?.unfocus();
+                          Navigator.pop(dialogContext);
+                        }
+                      : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF00A884),
                     foregroundColor: Colors.white,
+                    disabledBackgroundColor: isDark ? Colors.white10 : Colors.black12,
+                    disabledForegroundColor: isDark ? Colors.grey[600] : Colors.grey[400],
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                   child: const Text('Write'),
@@ -906,22 +1113,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       orElse: () => widget.device,
     );
 
-    final allCommands = deviceProvider.getQuickCommands(activeDevice.id);
-    QuickCommandModel? settingsCommand;
-    for (final cmd in allCommands) {
-      final msg = cmd.message.trim().toLowerCase();
-      if (msg == '/holding' ||
-          msg == '/setting' ||
-          msg == '/settings' ||
-          msg.startsWith('/holding ') ||
-          msg.startsWith('/setting ') ||
-          msg.startsWith('/settings ')) {
-        settingsCommand = cmd;
-        break;
-      }
-    }
-    final bool hasSettingsCommand = settingsCommand != null;
-
     return Scaffold(
       appBar: AppBar(
         title: GestureDetector(
@@ -1014,34 +1205,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert),
               onSelected: (value) {
-                if (value == 'settings') {
-                  final status = deviceProvider.getDeviceConnectionStatus(activeDevice.id);
-                  if (status != 'online') {
-                    deviceProvider.connectWebSocket(activeDevice.id);
-                  }
-                  final cmdToSend = settingsCommand?.message ?? '/holding';
-                  final labelToSend = (settingsCommand != null && settingsCommand.label.trim().isNotEmpty)
-                      ? settingsCommand.label.trim()
-                      : 'Get device settings';
-                  _sendMessage(cmdToSend, labelToSend);
-                } else if (value == 'config') {
+                if (value == 'config') {
                   _showConfigurationDialog(context, deviceProvider, activeDevice);
                 } else if (value == 'wifi_setup') {
                   _showWifiSetupDialog(context, deviceProvider, activeDevice);
                 }
               },
               itemBuilder: (context) => [
-                if (hasSettingsCommand)
-                  const PopupMenuItem<String>(
-                    value: 'settings',
-                    child: Row(
-                      children: [
-                        Icon(Icons.tune_rounded, size: 20, color: Color(0xFF00A884)),
-                        SizedBox(width: 8),
-                        Text('Settings'),
-                      ],
-                    ),
-                  ),
                 const PopupMenuItem<String>(
                   value: 'config',
                   child: Row(
@@ -1089,7 +1259,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                           itemBuilder: (context, index) {
                             final msg = messages[messages.length - 1 - index];
                             final isResendable = msg.isUser &&
-                                msg.command != '/write_single_reg' &&
+                                msg.command != '/write_holding' &&
+                                msg.command != '/write_setting' &&
                                 !msg.text.startsWith('Sent Configuration:') &&
                                 !msg.text.startsWith('Sent Wi-Fi Setup:') &&
                                 !msg.text.startsWith('Set ');
@@ -1111,7 +1282,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                             return Align(
                               alignment: msg.isUser ? Alignment.centerRight : Alignment.centerLeft,
                               child: Container(
-                                margin: const EdgeInsets.only(bottom: 8),
+                                margin: const EdgeInsets.only(bottom: 6),
                                 child: Material(
                                   color: msg.isUser 
                                       ? Theme.of(context).colorScheme.primary 
@@ -1370,6 +1541,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       icon = Icons.restart_alt_rounded;
     } else if (lowerLabel.contains('diagnose') || lowerMsg.contains('diagnose')) {
       icon = Icons.healing_rounded;
+    } else if (lowerLabel.contains('holding') || lowerMsg.contains('holding')) {
+      icon = Icons.tune_rounded;
+    } else if (lowerLabel.contains('setting') || lowerMsg.contains('setting')) {
+      icon = Icons.tune_rounded;
     } else if (isCustom) {
       icon = Icons.touch_app_rounded;
     }
@@ -1511,7 +1686,7 @@ class _DeviceConfigDialogState extends State<DeviceConfigDialog> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'TELEMETRY ITEMS',
+                    'CHANNELS',
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
@@ -1541,31 +1716,59 @@ class _DeviceConfigDialogState extends State<DeviceConfigDialog> {
                   padding: EdgeInsets.symmetric(vertical: 20.0),
                   child: Center(
                     child: Text(
-                      'No status configuration data available.\nPlease query device status in the chat first.',
+                      'No status configuration data available.\nPlease query device status to load channels.',
                       style: TextStyle(color: Colors.grey, fontSize: 13),
                       textAlign: TextAlign.center,
                     ),
                   ),
                 )
               else
-                ...configItems.map((item) {
+                ...configItems.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final item = entry.value;
+                  final channelNumber = (index + 1).toString();
+
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 14.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          item.key,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13.5,
-                          ),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF00A884).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                'Channel $channelNumber',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF00A884),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                item.key,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDark ? Colors.grey[400] : Colors.grey[600],
+                                  fontFamily: 'monospace',
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 6),
                         TextField(
                           controller: item.valueController,
                           decoration: InputDecoration(
-                            hintText: 'Enter custom name for ${item.key}',
+                            hintText: 'Enter name (e.g. AC, Pump)',
                             hintStyle: TextStyle(
                               fontSize: 12.5,
                               color: isDark ? Colors.grey[500] : Colors.grey[400],
@@ -1614,8 +1817,11 @@ class _DeviceConfigDialogState extends State<DeviceConfigDialog> {
                   final Map<String, dynamic> configData = {};
                   for (int i = 0; i < configItems.length; i++) {
                     final item = configItems[i];
+                    final channelIndex = (i + 1).toString();
                     final val = item.valueController.text.trim();
-                    configData[item.key] = val.isNotEmpty ? val : item.key;
+                    final isNA = item.key.toUpperCase().startsWith('NA');
+                    final fallback = isNA ? '' : item.key;
+                    configData[channelIndex] = val.isNotEmpty ? val : fallback;
                   }
 
                   widget.provider.sendConfig(widget.device.id, configData);

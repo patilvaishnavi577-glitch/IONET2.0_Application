@@ -360,7 +360,7 @@ class _UpdatesScreenState extends State<UpdatesScreen> {
             if (!_isLoading && _errorMsg == null && recentUpdates.isNotEmpty)
               SliverToBoxAdapter(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   color: isDark ? const Color(0xFF111B21) : Colors.grey.shade50,
                   child: Text(
                     'Recent updates',
@@ -413,7 +413,7 @@ class _UpdatesScreenState extends State<UpdatesScreen> {
                     });
                   },
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     color: isDark ? const Color(0xFF111B21) : Colors.grey.shade50,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -538,8 +538,10 @@ class _UpdatesScreenState extends State<UpdatesScreen> {
     );
 
     return ListTile(
+      dense: true,
+      visualDensity: const VisualDensity(vertical: -2),
       onTap: () => _openUpdateViewer(update),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
       leading: StatusRing(
         isViewed: isViewed,
         segmentCount: segmentCount,
