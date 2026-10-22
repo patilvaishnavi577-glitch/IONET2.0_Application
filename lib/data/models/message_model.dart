@@ -8,6 +8,8 @@ class MessageModel {
   final bool isEditable;
   final bool? isSuccess;
   final String? responseCommand;
+  final String? type;
+  final String? title;
 
   MessageModel({
     required this.id,
@@ -19,6 +21,8 @@ class MessageModel {
     this.isEditable = false,
     this.isSuccess,
     this.responseCommand,
+    this.type,
+    this.title,
   });
 
   MessageModel copyWith({
@@ -31,6 +35,8 @@ class MessageModel {
     bool? isEditable,
     bool? isSuccess,
     String? responseCommand,
+    String? type,
+    String? title,
   }) {
     return MessageModel(
       id: id ?? this.id,
@@ -42,6 +48,8 @@ class MessageModel {
       isEditable: isEditable ?? this.isEditable,
       isSuccess: isSuccess ?? this.isSuccess,
       responseCommand: responseCommand ?? this.responseCommand,
+      type: type ?? this.type,
+      title: title ?? this.title,
     );
   }
 
@@ -56,6 +64,8 @@ class MessageModel {
       isEditable: json['isEditable'] as bool? ?? false,
       isSuccess: json['isSuccess'] as bool?,
       responseCommand: json['responseCommand'] as String?,
+      type: json['type'] as String?,
+      title: json['title'] as String?,
     );
   }
 
@@ -70,6 +80,8 @@ class MessageModel {
       if (isEditable) 'isEditable': isEditable,
       if (isSuccess != null) 'isSuccess': isSuccess,
       if (responseCommand != null) 'responseCommand': responseCommand,
+      if (type != null) 'type': type,
+      if (title != null) 'title': title,
     };
   }
 }

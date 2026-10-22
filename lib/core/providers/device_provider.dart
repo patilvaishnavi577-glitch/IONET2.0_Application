@@ -31,7 +31,74 @@ class DeviceProvider extends ChangeNotifier {
   final Map<String, Map<String, dynamic>> _latestDeviceStatusData = {};
   final Map<String, String> _lastSentCommand = {};
   final Map<String, Map<String, dynamic>> _pendingRegisterWrites = {};
+  final Map<String, Map<String, String>> _deviceRelayNames = {};
   Timer? _heartbeatTimer;
+
+  Map<String, String> getDeviceRelayNames(String deviceId) {
+    if (_deviceRelayNames.containsKey(deviceId) && _deviceRelayNames[deviceId]!.isNotEmpty) {
+      return _deviceRelayNames[deviceId]!;
+    }
+    final names = <String, String>{};
+    final msgs = _messages[deviceId];
+    if (msgs != null) {
+      for (final m in msgs) {
+        if (m.rawData != null &&
+            (m.title?.toLowerCase().contains('relay') == true ||
+             m.type?.toUpperCase() == 'TEXT' ||
+             m.command == '/text')) {
+          m.rawData!.forEach((k, v) {
+            final val = (v is Map && v['value'] != null) ? v['value'].toString() : v?.toString();
+            if (val != null && val.trim().isNotEmpty && int.tryParse(val.trim()) == null) {
+              names[k.toString().trim()] = val.trim();
+            }
+          });
+        }
+      }
+    }
+    if (names.isNotEmpty) {
+      _deviceRelayNames[deviceId] = names;
+    }
+    return _deviceRelayNames[deviceId] ?? names;
+  }
+
+  void setRelayName(String deviceId, String relayKey, String relayName) {
+    if (!_deviceRelayNames.containsKey(deviceId)) {
+      _deviceRelayNames[deviceId] = {};
+    }
+    _deviceRelayNames[deviceId]![relayKey.trim()] = relayName.trim();
+    _saveRelayNamesToPrefs(deviceId);
+    notifyListeners();
+  }
+
+  Future<void> _saveRelayNamesToPrefs(String deviceId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final names = _deviceRelayNames[deviceId];
+      if (names != null) {
+        await prefs.setString('relay_names_$deviceId', jsonEncode(names));
+      }
+    } catch (e) {
+      debugPrint('Error saving relay names: $e');
+    }
+  }
+
+  Future<void> loadRelayNamesFromPrefs(String deviceId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final str = prefs.getString('relay_names_$deviceId');
+      if (str != null) {
+        final decoded = jsonDecode(str);
+        if (decoded is Map) {
+          _deviceRelayNames[deviceId] = Map<String, String>.from(
+            decoded.map((k, v) => MapEntry(k.toString(), v.toString())),
+          );
+          notifyListeners();
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading relay names: $e');
+    }
+  }
 
   String getDeviceConnectionStatus(String deviceId) => _deviceConnectionStatus[deviceId] ?? 'offline';
   bool isDeviceOnline(String deviceId) => getDeviceConnectionStatus(deviceId) == 'online';
@@ -60,7 +127,104 @@ class DeviceProvider extends ChangeNotifier {
   }
   final Map<String, List<QuickCommandModel>> _customQuickCommands = {};
   
-  List<QuickCommandModel> getDeviceCommands(String deviceId) => _deviceQuickCommands[deviceId] ?? [];
+  List<QuickCommandModel> getDeviceCommands(String deviceId) {
+    if (_deviceQuickCommands.containsKey(deviceId) && _deviceQuickCommands[deviceId]!.isNotEmpty) {
+      return _deviceQuickCommands[deviceId]!;
+    }
+    final details = _deviceDetails[deviceId];
+    if (details != null) {
+      final cmds = details['availableCommands'] ??
+          details['additionalCommands'] ??
+          details['commands'] ??
+          details['quickCommands'] ??
+          details['quick_commands'];
+      if (cmds != null) {
+        final parsed = _parseQuickCommands(cmds);
+        if (parsed.isNotEmpty) {
+          _deviceQuickCommands[deviceId] = parsed;
+          return parsed;
+        }
+      }
+    }
+    return _deviceQuickCommands[deviceId] ?? [];
+  }
+
+  static List<QuickCommandModel> _parseQuickCommands(dynamic rawCmds) {
+    if (rawCmds == null) return [];
+    final List<QuickCommandModel> result = [];
+    if (rawCmds is List) {
+      for (var item in rawCmds) {
+        if (item is Map) {
+          final cmdMsg = (item['command'] ?? item['message'] ?? item['action'] ?? '').toString().trim();
+          final cmdDesc = (item['label'] ?? item['title'] ?? item['description'] ?? item['name'] ?? '').toString().trim();
+          if (cmdMsg.isNotEmpty) {
+            String label = cmdDesc;
+            if (label.isEmpty) {
+              label = cmdMsg.startsWith('/') ? cmdMsg.substring(1) : cmdMsg;
+              label = label.replaceAll('_', ' ');
+            }
+            result.add(QuickCommandModel(label: label, message: cmdMsg));
+          }
+        } else if (item is String) {
+          final str = item.trim();
+          if (str.isNotEmpty) {
+            String label = str.startsWith('/') ? str.substring(1) : str;
+            label = label.replaceAll('_', ' ');
+            result.add(QuickCommandModel(label: label, message: str));
+          }
+        }
+      }
+    } else if (rawCmds is Map) {
+      rawCmds.forEach((k, v) {
+        final String cmdKey = k.toString().trim();
+        String label = (v is Map ? (v['label'] ?? v['title'] ?? v['description'] ?? '') : (v?.toString() ?? '')).trim();
+        if (label.isEmpty) {
+          label = cmdKey.startsWith('/') ? cmdKey.substring(1) : cmdKey;
+          label = label.replaceAll('_', ' ');
+        }
+        result.add(QuickCommandModel(label: label, message: cmdKey));
+      });
+    }
+    return result;
+  }
+
+  Future<void> _saveDeviceCommandsToPrefs(String deviceId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cmds = _deviceQuickCommands[deviceId];
+      if (cmds != null) {
+        final listJson = cmds.map((c) => jsonEncode({
+          'label': c.label,
+          'message': c.message,
+        })).toList();
+        await prefs.setStringList('device_commands_$deviceId', listJson);
+      }
+    } catch (e) {
+      debugPrint('Error saving device commands to prefs: $e');
+    }
+  }
+
+  Future<void> loadDeviceCommands(String deviceId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final List<String>? saved = prefs.getStringList('device_commands_$deviceId');
+      if (saved != null && saved.isNotEmpty) {
+        final List<QuickCommandModel> loaded = saved.map((s) {
+          final decoded = jsonDecode(s);
+          return QuickCommandModel(
+            label: decoded['label'] as String? ?? '',
+            message: decoded['message'] as String? ?? '',
+          );
+        }).where((c) => c.message.isNotEmpty).toList();
+        if (loaded.isNotEmpty) {
+          _deviceQuickCommands[deviceId] = loaded;
+          notifyListeners();
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading device commands: $e');
+    }
+  }
   List<QuickCommandModel> getCustomCommands(String deviceId) => _customQuickCommands[deviceId] ?? [];
 
   List<QuickCommandModel> getQuickCommands(String deviceId) {
@@ -167,14 +331,7 @@ class DeviceProvider extends ChangeNotifier {
     }
   }
 
-  final List<QuickCommandModel> _quickCommands = [
-    QuickCommandModel(label: 'Info', message: '/status'),
-    QuickCommandModel(label: 'Status', message: 'Status'),
-    QuickCommandModel(label: 'Reboot', message: 'Reboot'),
-    QuickCommandModel(label: 'M1', message: 'M1'),
-    QuickCommandModel(label: 'M2', message: 'M2'),
-    QuickCommandModel(label: 'Diagnose', message: 'Diagnose'),
-  ];
+  final List<QuickCommandModel> _quickCommands = [];
 
   List<DeviceModel> get devices => _devices;
   List<QuickCommandModel> get quickCommands => _quickCommands;
@@ -567,7 +724,20 @@ class DeviceProvider extends ChangeNotifier {
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
         if (decoded is Map && decoded['data'] is Map) {
-          _deviceDetails[deviceId] = Map<String, dynamic>.from(decoded['data'] as Map);
+          final dataMap = Map<String, dynamic>.from(decoded['data'] as Map);
+          _deviceDetails[deviceId] = dataMap;
+          final cmds = dataMap['availableCommands'] ??
+              dataMap['additionalCommands'] ??
+              dataMap['commands'] ??
+              dataMap['quickCommands'] ??
+              dataMap['quick_commands'];
+          if (cmds != null) {
+            final dynamicCmds = _parseQuickCommands(cmds);
+            if (dynamicCmds.isNotEmpty) {
+              _deviceQuickCommands[deviceId] = dynamicCmds;
+              _saveDeviceCommandsToPrefs(deviceId);
+            }
+          }
           notifyListeners();
         }
       }
@@ -600,6 +770,18 @@ class DeviceProvider extends ChangeNotifier {
         final decoded = jsonDecode(response.body);
         if (decoded is Map && decoded['data'] is Map) {
           final data = decoded['data'];
+          final cmds = data['availableCommands'] ??
+              data['additionalCommands'] ??
+              data['commands'] ??
+              data['quickCommands'] ??
+              data['quick_commands'];
+          if (cmds != null) {
+            final dynamicCmds = _parseQuickCommands(cmds);
+            if (dynamicCmds.isNotEmpty) {
+              _deviceQuickCommands[deviceId] = dynamicCmds;
+              _saveDeviceCommandsToPrefs(deviceId);
+            }
+          }
           final lastSeen = data['lastSeen'] as String?;
           if (lastSeen != null) {
             // Convert to IST (UTC + 5:30)
@@ -699,18 +881,37 @@ class DeviceProvider extends ChangeNotifier {
             final lastCmd = (_lastSentCommand[deviceId] ?? '').trim().toLowerCase();
             final eventCmd = (event['command'] ?? '').toString().trim().toLowerCase();
             final activeCmd = eventCmd.isNotEmpty ? eventCmd : lastCmd;
+            final eventType = (event['type'] ?? '').toString().toUpperCase();
+            final isNumericType = eventType == 'NUMERIC';
+            final isTextType = eventType == 'TEXT';
+            final isRadioType = eventType == 'RADIO';
+            final isClickableType = eventType == 'CLICKABLE';
+            final isTimeType = eventType == 'TIME';
+            final isCyclicType = eventType == 'CYCLIC';
+            final isCDTType = eventType == 'CDT';
+            final isResponseType = eventType == 'RESPONSE';
 
             final isNonStatusCmd = activeCmd == '/holding' ||
                 activeCmd == '/setting' ||
                 activeCmd == '/about' ||
                 activeCmd == '/config' ||
                 activeCmd == '/wifi_setup' ||
+                activeCmd == '/cdt' ||
                 activeCmd == '/write_holding' ||
                 activeCmd == '/write_setting' ||
-                (event['type'] == 'response' && activeCmd != '/status');
+                activeCmd == '/write_register' ||
+                activeCmd == 'write_register' ||
+                isNumericType ||
+                isTextType ||
+                isRadioType ||
+                isClickableType ||
+                isTimeType ||
+                isCyclicType ||
+                isCDTType ||
+                (isResponseType && activeCmd.isNotEmpty && activeCmd != '/status' && !event.containsKey('data'));
 
             final isStatusData = !isNonStatusCmd &&
-                (activeCmd == '/status' || activeCmd.isEmpty || event['type'] == 'telemetry');
+                (activeCmd == '/status' || activeCmd.isEmpty || eventType == 'TELEMETRY' || isResponseType);
 
             if (isStatusData) {
               if (parsedData.isNotEmpty) {
@@ -722,7 +923,7 @@ class DeviceProvider extends ChangeNotifier {
               }
             }
 
-            // Check if this is a response to a command (e.g. /write_holding, /config, etc.)
+            // Check if this is a response to a command (e.g. /write_holding, /write_register, /config, etc.)
             final isResponse = event['type'] == 'response' ||
                 (event.containsKey('command') && event.containsKey('success'));
             if (isResponse) {
@@ -744,8 +945,14 @@ class DeviceProvider extends ChangeNotifier {
                 return;
               }
 
-              // If /write_holding or /write_setting succeeded, update latest message's rawData
-              if ((respCmd == '/write_holding' || respCmd == '/write_setting') && isSuccess) {
+              // If /write_holding, /write_setting, /write_register or timing write succeeded, update latest message's rawData
+              final isWriteCommand = respCmd == '/write_holding' ||
+                  respCmd == '/write_setting' ||
+                  respCmd == '/write_register' ||
+                  respCmd == 'write_register' ||
+                  respCmd == '/write_time' ||
+                  respCmd == '/time';
+              if (isWriteCommand && isSuccess) {
                 final pending = _pendingRegisterWrites[deviceId];
                 if (pending != null) {
                   final regKey = pending['key'] as String;
@@ -820,11 +1027,12 @@ class DeviceProvider extends ChangeNotifier {
               return;
             }
 
-            // Treat other device-origin messages as activity to show online
+            // Treat any device-origin messages as activity to show online
             final hasDeviceId = event.containsKey('deviceId') || event.containsKey('deviceid');
             final hasData = event.containsKey('data') || event.containsKey('availableCommands') || event.containsKey('additionalCommands');
+            final hasActivity = hasDeviceId || hasData || event.containsKey('type') || event.containsKey('command');
             
-            if (hasDeviceId || hasData) {
+            if (hasActivity) {
               _deviceConnectionStatus[deviceId] = 'online';
               notifyListeners();
               
@@ -839,47 +1047,63 @@ class DeviceProvider extends ChangeNotifier {
             // Parse response commands
             String? textMsg;
             
-            // Extract quick commands dynamically (supporting both List of Map objects and flat Map formats)
-            final cmds = event['availableCommands'] ?? event['additionalCommands'];
+            // Extract quick commands dynamically from backend
+            final cmds = event['availableCommands'] ??
+                event['additionalCommands'] ??
+                event['commands'] ??
+                event['quickCommands'] ??
+                event['quick_commands'];
             if (cmds != null) {
-              final List<QuickCommandModel> dynamicCmds = [];
-              if (cmds is List) {
-                for (var item in cmds) {
-                  if (item is Map) {
-                    final cmdMsg = (item['command'] ?? item['message'] ?? '').toString();
-                    final cmdDesc = (item['description'] ?? item['label'] ?? item['title'] ?? '').toString();
-                    if (cmdMsg.isNotEmpty) {
-                      String label = cmdDesc;
-                      if (label.isEmpty) {
-                        label = cmdMsg.startsWith('/') ? cmdMsg.substring(1) : cmdMsg;
-                        label = label.replaceAll('_', ' ');
-                      }
-                      dynamicCmds.add(QuickCommandModel(label: label, message: cmdMsg));
-                    }
-                  }
-                }
-              } else if (cmds is Map) {
-                cmds.forEach((k, v) {
-                  final String cmdKey = k.toString();
-                  String label = v?.toString() ?? '';
-                  if (label.isEmpty) {
-                    label = cmdKey.startsWith('/') ? cmdKey.substring(1) : cmdKey;
-                    label = label.replaceAll('_', ' ');
-                  }
-                  dynamicCmds.add(QuickCommandModel(label: label, message: cmdKey));
-                });
-              }
+              final dynamicCmds = _parseQuickCommands(cmds);
               if (dynamicCmds.isNotEmpty) {
                 _deviceQuickCommands[deviceId] = dynamicCmds;
+                _saveDeviceCommandsToPrefs(deviceId);
                 notifyListeners();
+              }
+            }
+
+            Map<String, dynamic>? rawMap;
+            if (event['data'] is Map) {
+              rawMap = Map<String, dynamic>.from(event['data'] as Map);
+            } else if (event['data'] is List) {
+              rawMap = {};
+              for (var item in (event['data'] as List)) {
+                if (item is Map) {
+                  final k = (item['key'] ?? item['name'] ?? item['command'] ?? item['id'] ?? '').toString();
+                  if (k.isNotEmpty) {
+                    rawMap[k] = item;
+                  }
+                } else if (item != null) {
+                  rawMap[item.toString()] = '';
+                }
               }
             }
 
             // Telemetry Data (Preserving duplicate keys if present)
             final Map<String, dynamic> nestedData = _extractDataPreservingDuplicates(
               data,
-              event['data'] is Map ? Map<String, dynamic>.from(event['data'] as Map) : null,
+              rawMap,
             );
+
+            // Automatically extract and cache relay names (e.g. from 'Rename the relays' or TEXT payloads)
+            if (nestedData.isNotEmpty &&
+                (event['title']?.toString().toLowerCase().contains('relay') == true ||
+                 event['type']?.toString().toUpperCase() == 'TEXT')) {
+              final Map<String, String> names = {};
+              nestedData.forEach((k, v) {
+                final strV = (v is Map && v['value'] != null) ? v['value'].toString() : v?.toString();
+                if (strV != null && strV.trim().isNotEmpty && int.tryParse(strV.trim()) == null) {
+                  names[k.toString().trim()] = strV.trim();
+                }
+              });
+              if (names.isNotEmpty) {
+                if (!_deviceRelayNames.containsKey(deviceId)) {
+                  _deviceRelayNames[deviceId] = {};
+                }
+                _deviceRelayNames[deviceId]!.addAll(names);
+                _saveRelayNamesToPrefs(deviceId);
+              }
+            }
 
             // Determine the message text to display in the chat screen bubble (supporting flat and nested "data" formats)
             if (event.containsKey('text') || event.containsKey('message')) {
@@ -891,7 +1115,11 @@ class DeviceProvider extends ChangeNotifier {
                 nestedData.forEach((k, v) {
                   String label = k.toString().replaceAll('_', ' ');
                   final displayVal = (v is Map && v.containsKey('value')) ? v['value'] : v;
-                  lines.add('$label: $displayVal');
+                  if (displayVal != null && displayVal.toString().isNotEmpty) {
+                    lines.add('$label: $displayVal');
+                  } else {
+                    lines.add(label);
+                  }
                 });
               } else {
                 event.forEach((k, v) {
@@ -899,6 +1127,7 @@ class DeviceProvider extends ChangeNotifier {
                   if (lowerKey != 'availablecommands' &&
                       lowerKey != 'additionalcommands' &&
                       lowerKey != 'type' &&
+                      lowerKey != 'title' &&
                       lowerKey != 'id' &&
                       lowerKey != 'deviceid' &&
                       lowerKey != 'timestamp' &&
@@ -931,25 +1160,89 @@ class DeviceProvider extends ChangeNotifier {
                   event['command'] == '/holding';
               final isSetting = lastCmd == '/setting' ||
                   event['command'] == '/setting';
-              final isHoldingOrSetting = isHolding || isSetting;
+              final isNumeric = isNumericType ||
+                  lastCmd == '/write_register' ||
+                  lastCmd == 'write_register' ||
+                  event['command'] == '/write_register' ||
+                  event['command'] == 'write_register' ||
+                  lastCmd == '/numeric' ||
+                  event['command'] == '/numeric';
+              final isText = isTextType ||
+                  lastCmd == '/text' ||
+                  event['command'] == '/text';
+              final isRadio = isRadioType ||
+                  lastCmd == '/radio' ||
+                  event['command'] == '/radio';
+              final isClickable = isClickableType ||
+                  lastCmd == '/clickable' ||
+                  event['command'] == '/clickable';
+              final eventTitleLower = (event['title'] ?? '').toString().toLowerCase();
+              final textMsgLower = textMsg.toLowerCase();
+              final isCheckMode = lastCmd.toLowerCase().contains('check mode') ||
+                  lastCmd.toLowerCase().contains('check_mode') ||
+                  lastCmd.toLowerCase().contains('/check_mode') ||
+                  (event['command'] != null && event['command'].toString().toLowerCase().contains('check_mode')) ||
+                  eventTitleLower.contains('check mode');
+              final isTimingOrRtc = !isCheckMode && (isTimeType ||
+                  lastCmd == '/time' ||
+                  event['command'] == '/time' ||
+                  eventTitleLower.contains('on-off') ||
+                  eventTitleLower.contains('on/off') ||
+                  eventTitleLower.contains('timing') ||
+                  eventTitleLower.contains('rtc') ||
+                  textMsgLower.contains('on-off') ||
+                  textMsgLower.contains('timing') ||
+                  textMsgLower.contains('rtc'));
+              final isCDT = !isCheckMode && !isTimingOrRtc &&
+                  (isCDTType ||
+                  lastCmd == '/cdt' ||
+                  event['command'] == '/cdt' ||
+                  eventTitleLower.contains('cdt') ||
+                  (eventTitleLower.contains('off time') && !eventTitleLower.contains('on-off') && !eventTitleLower.contains('on/off')) ||
+                  textMsgLower.contains('cdt') ||
+                  (textMsgLower.contains('off time') && !textMsgLower.contains('on-off') && !textMsgLower.contains('on/off')));
+              final isTime = !isCheckMode && (isTimingOrRtc ||
+                  (!isCDT &&
+                  (eventTitleLower.contains('on-off time') || eventTitleLower.contains('timing'))));
+              final isCyclic = !isCheckMode && (isCyclicType ||
+                  lastCmd == '/cyclic' ||
+                  event['command'] == '/cyclic');
+              final isHoldingOrSetting = !isCheckMode && (isHolding || isSetting || isNumeric || isText || isRadio || isClickable || isTime || isCyclic || isCDT);
 
               // Reset lastSentCommand once consumed so future status telemetry stays standard
-              if (isHoldingOrSetting) {
+              if (isHoldingOrSetting || isCheckMode) {
                 _lastSentCommand.remove(deviceId);
               }
 
               final effectiveData = nestedData.isNotEmpty
                   ? nestedData
-                  : (event['data'] is Map ? Map<String, dynamic>.from(event['data'] as Map) : null);
+                  : rawMap;
+
+              String? msgTitle = event['title'] as String? ??
+                  event['header'] as String? ??
+                  event['name'] as String? ??
+                  event['description'] as String?;
+
+              if (isCheckMode) {
+                msgTitle = 'Check Mode';
+              } else if ((msgTitle == null || msgTitle.trim().isEmpty) &&
+                  textMsg.trim().isNotEmpty) {
+                final candidate = textMsg.trim();
+                if (!candidate.contains('\n') && candidate.length < 100) {
+                  msgTitle = candidate;
+                }
+              }
 
               final newMsg = MessageModel(
                 id: event['id'] as String? ?? 'ws_${DateTime.now().millisecondsSinceEpoch}',
                 text: textMsg,
-                command: event['command'] as String? ?? (lastCmd.isNotEmpty ? lastCmd : null),
+                command: event['command'] as String? ?? (isCDT || isCyclic || isNumeric || isText || isRadio || isClickable || isTime ? '/write_register' : (lastCmd.isNotEmpty ? lastCmd : null)),
                 timestamp: DateTime.now(),
                 isUser: false,
                 rawData: effectiveData,
-                isEditable: isHoldingOrSetting && effectiveData != null && effectiveData.isNotEmpty,
+                isEditable: !isCheckMode && isHoldingOrSetting && effectiveData != null && effectiveData.isNotEmpty,
+                type: isCheckMode ? 'CHECK_MODE' : (event['type']?.toString() ?? (isCDT ? 'CDT' : (isTime ? 'TIME' : (isCyclic ? 'CYCLIC' : null)))),
+                title: msgTitle,
               );
               _addMessageLocally(deviceId, newMsg);
             }
@@ -1053,7 +1346,7 @@ class DeviceProvider extends ChangeNotifier {
     }
   }
 
-  void writeSingleRegister(String deviceId, String key, dynamic value, {String writeCommand = '/write_holding'}) {
+  void writeSingleRegister(String deviceId, String key, dynamic value, {String writeCommand = '/write_register'}) {
     final formattedKey = key.replaceAll('_', ' ');
     final displayText = 'Set $formattedKey: $value';
     _lastSentCommand[deviceId] = writeCommand;
@@ -1072,7 +1365,7 @@ class DeviceProvider extends ChangeNotifier {
     if (_webSocket != null && _webSocket!.readyState == WebSocket.open) {
       try {
         final payload = jsonEncode({
-          'type': writeCommand,
+          'command': writeCommand,
           'data': {key: value},
         });
         debugPrint('--> [WEBSOCKET SEND] Payload: $payload');
