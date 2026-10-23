@@ -1445,6 +1445,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final endMinController = FixedExtentScrollController(initialItem: endMin);
     final startTextController = TextEditingController(text: startMin.toString());
     final endTextController = TextEditingController(text: endMin.toString());
+    final startFocusNode = FocusNode();
+    final endFocusNode = FocusNode();
 
     showDialog(
       context: context,
@@ -1583,10 +1585,17 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         // Start Min Card
                         Expanded(
                           child: InkWell(
-                            borderRadius: BorderRadius.circular(12),
-                            onTap: () => setDialogState(() => activeColumn = 0),
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: () {
+                              setDialogState(() => activeColumn = 0);
+                              startFocusNode.requestFocus();
+                              startTextController.selection = TextSelection(
+                                baseOffset: 0,
+                                extentOffset: startTextController.text.length,
+                              );
+                            },
                             child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
                               decoration: BoxDecoration(
                                 color: activeColumn == 0
                                     ? (isDark
@@ -1595,7 +1604,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                     : (isDark
                                         ? Colors.white.withValues(alpha: 0.04)
                                         : Colors.grey[100]),
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
                                   color: activeColumn == 0
                                       ? amberColor
@@ -1610,7 +1619,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                     children: [
                                       Icon(
                                         Icons.access_time_rounded,
-                                        size: 12,
+                                        size: 13,
                                         color: activeColumn == 0
                                             ? amberColor
                                             : (isDark ? Colors.grey[400] : Colors.grey[600]),
@@ -1619,9 +1628,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                       Text(
                                         'START MIN',
                                         style: TextStyle(
-                                          fontSize: 9.5,
+                                          fontSize: 10.5,
                                           fontWeight: FontWeight.bold,
-                                          letterSpacing: 0.3,
+                                          letterSpacing: 0.4,
                                           color: activeColumn == 0
                                               ? amberColor
                                               : (isDark ? Colors.grey[400] : Colors.grey[600]),
@@ -1629,65 +1638,92 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 2),
+                                  const SizedBox(height: 8),
                                   FittedBox(
                                     fit: BoxFit.scaleDown,
                                     child: Row(
                                       mainAxisAlignment: MainAxisAlignment.center,
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        IntrinsicWidth(
-                                          child: TextField(
-                                            controller: startTextController,
-                                            keyboardType: TextInputType.number,
-                                            textAlign: TextAlign.center,
-                                            style: TextStyle(
-                                              fontFamily: 'monospace',
-                                              fontSize: 17,
-                                              fontWeight: FontWeight.bold,
+                                        // Dedicated square input box for manual typing
+                                        Container(
+                                          height: 44,
+                                          constraints: const BoxConstraints(minWidth: 54),
+                                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                                          decoration: BoxDecoration(
+                                            color: isDark
+                                                ? const Color(0xFF1E293B)
+                                                : Colors.white,
+                                            borderRadius: BorderRadius.circular(6),
+                                            border: Border.all(
                                               color: activeColumn == 0
-                                                  ? (isDark ? Colors.white : Colors.black87)
-                                                  : (isDark ? Colors.grey[300] : Colors.grey[700]),
+                                                  ? amberColor
+                                                  : (isDark ? Colors.white24 : Colors.black26),
+                                              width: activeColumn == 0 ? 1.8 : 1.2,
                                             ),
-                                            decoration: const InputDecoration(
-                                              isDense: true,
-                                              border: InputBorder.none,
-                                              contentPadding: EdgeInsets.zero,
-                                            ),
-                                            onTap: () => setDialogState(() => activeColumn = 0),
-                                            onChanged: (val) {
-                                              final n = int.tryParse(val.trim());
-                                              if (n != null) {
-                                                final clamped = n.clamp(0, 999);
-                                                setDialogState(() {
-                                                  startMin = clamped;
-                                                  activeColumn = 0;
-                                                });
-                                                if (startMinController.hasClients && startMinController.selectedItem != clamped) {
-                                                  startMinController.jumpToItem(clamped);
+                                          ),
+                                          alignment: Alignment.center,
+                                          child: IntrinsicWidth(
+                                            child: TextField(
+                                              controller: startTextController,
+                                              focusNode: startFocusNode,
+                                              keyboardType: TextInputType.number,
+                                              textAlign: TextAlign.center,
+                                              style: TextStyle(
+                                                fontFamily: 'monospace',
+                                                fontSize: 20,
+                                                fontWeight: FontWeight.bold,
+                                                color: activeColumn == 0
+                                                    ? (isDark ? Colors.white : Colors.black87)
+                                                    : (isDark ? Colors.grey[300] : Colors.grey[700]),
+                                              ),
+                                              decoration: const InputDecoration(
+                                                isDense: true,
+                                                border: InputBorder.none,
+                                                contentPadding: EdgeInsets.zero,
+                                              ),
+                                              onTap: () {
+                                                setDialogState(() => activeColumn = 0);
+                                                startTextController.selection = TextSelection(
+                                                  baseOffset: 0,
+                                                  extentOffset: startTextController.text.length,
+                                                );
+                                              },
+                                              onChanged: (val) {
+                                                final n = int.tryParse(val.trim());
+                                                if (n != null) {
+                                                  final clamped = n.clamp(0, 999);
+                                                  setDialogState(() {
+                                                    startMin = clamped;
+                                                    activeColumn = 0;
+                                                  });
+                                                  if (startMinController.hasClients &&
+                                                      startMinController.selectedItem != clamped) {
+                                                    startMinController.jumpToItem(clamped);
+                                                  }
                                                 }
-                                              }
-                                            },
+                                              },
+                                            ),
                                           ),
                                         ),
-                                        const SizedBox(width: 2),
+                                        const SizedBox(width: 4),
                                         Text(
                                           'min',
                                           style: TextStyle(
-                                            fontSize: 11.5,
+                                            fontSize: 12.5,
                                             fontWeight: FontWeight.w600,
                                             color: activeColumn == 0
                                                 ? amberColor
                                                 : (isDark ? Colors.grey[400] : Colors.grey[600]),
                                           ),
                                         ),
-                                        const SizedBox(width: 2),
+                                        const SizedBox(width: 3),
                                         Icon(
                                           Icons.edit_outlined,
-                                          size: 10,
+                                          size: 13,
                                           color: activeColumn == 0
-                                              ? amberColor.withValues(alpha: 0.8)
-                                              : (isDark ? Colors.white30 : Colors.black26),
+                                              ? amberColor.withValues(alpha: 0.9)
+                                              : (isDark ? Colors.white38 : Colors.black38),
                                         ),
                                       ],
                                     ),
@@ -1701,10 +1737,17 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         // End Min Card
                         Expanded(
                           child: InkWell(
-                            borderRadius: BorderRadius.circular(12),
-                            onTap: () => setDialogState(() => activeColumn = 1),
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: () {
+                              setDialogState(() => activeColumn = 1);
+                              endFocusNode.requestFocus();
+                              endTextController.selection = TextSelection(
+                                baseOffset: 0,
+                                extentOffset: endTextController.text.length,
+                              );
+                            },
                             child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
                               decoration: BoxDecoration(
                                 color: activeColumn == 1
                                     ? (isDark
@@ -1713,7 +1756,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                     : (isDark
                                         ? Colors.white.withValues(alpha: 0.04)
                                         : Colors.grey[100]),
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
                                   color: activeColumn == 1
                                       ? amberColor
@@ -1728,7 +1771,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                     children: [
                                       Icon(
                                         Icons.access_time_rounded,
-                                        size: 12,
+                                        size: 13,
                                         color: activeColumn == 1
                                             ? amberColor
                                             : (isDark ? Colors.grey[400] : Colors.grey[600]),
@@ -1737,9 +1780,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                       Text(
                                         'END MIN',
                                         style: TextStyle(
-                                          fontSize: 9.5,
+                                          fontSize: 10.5,
                                           fontWeight: FontWeight.bold,
-                                          letterSpacing: 0.3,
+                                          letterSpacing: 0.4,
                                           color: activeColumn == 1
                                               ? amberColor
                                               : (isDark ? Colors.grey[400] : Colors.grey[600]),
@@ -1747,65 +1790,92 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 2),
+                                  const SizedBox(height: 8),
                                   FittedBox(
                                     fit: BoxFit.scaleDown,
                                     child: Row(
                                       mainAxisAlignment: MainAxisAlignment.center,
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        IntrinsicWidth(
-                                          child: TextField(
-                                            controller: endTextController,
-                                            keyboardType: TextInputType.number,
-                                            textAlign: TextAlign.center,
-                                            style: TextStyle(
-                                              fontFamily: 'monospace',
-                                              fontSize: 17,
-                                              fontWeight: FontWeight.bold,
+                                        // Dedicated square input box for manual typing
+                                        Container(
+                                          height: 44,
+                                          constraints: const BoxConstraints(minWidth: 54),
+                                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                                          decoration: BoxDecoration(
+                                            color: isDark
+                                                ? const Color(0xFF1E293B)
+                                                : Colors.white,
+                                            borderRadius: BorderRadius.circular(6),
+                                            border: Border.all(
                                               color: activeColumn == 1
-                                                ? (isDark ? Colors.white : Colors.black87)
-                                                : (isDark ? Colors.grey[300] : Colors.grey[700]),
+                                                  ? amberColor
+                                                  : (isDark ? Colors.white24 : Colors.black26),
+                                              width: activeColumn == 1 ? 1.8 : 1.2,
                                             ),
-                                            decoration: const InputDecoration(
-                                              isDense: true,
-                                              border: InputBorder.none,
-                                              contentPadding: EdgeInsets.zero,
-                                            ),
-                                            onTap: () => setDialogState(() => activeColumn = 1),
-                                            onChanged: (val) {
-                                              final n = int.tryParse(val.trim());
-                                              if (n != null) {
-                                                final clamped = n.clamp(0, 999);
-                                                setDialogState(() {
-                                                  endMin = clamped;
-                                                  activeColumn = 1;
-                                                });
-                                                if (endMinController.hasClients && endMinController.selectedItem != clamped) {
-                                                  endMinController.jumpToItem(clamped);
+                                          ),
+                                          alignment: Alignment.center,
+                                          child: IntrinsicWidth(
+                                            child: TextField(
+                                              controller: endTextController,
+                                              focusNode: endFocusNode,
+                                              keyboardType: TextInputType.number,
+                                              textAlign: TextAlign.center,
+                                              style: TextStyle(
+                                                fontFamily: 'monospace',
+                                                fontSize: 20,
+                                                fontWeight: FontWeight.bold,
+                                                color: activeColumn == 1
+                                                  ? (isDark ? Colors.white : Colors.black87)
+                                                  : (isDark ? Colors.grey[300] : Colors.grey[700]),
+                                              ),
+                                              decoration: const InputDecoration(
+                                                isDense: true,
+                                                border: InputBorder.none,
+                                                contentPadding: EdgeInsets.zero,
+                                              ),
+                                              onTap: () {
+                                                setDialogState(() => activeColumn = 1);
+                                                endTextController.selection = TextSelection(
+                                                  baseOffset: 0,
+                                                  extentOffset: endTextController.text.length,
+                                                );
+                                              },
+                                              onChanged: (val) {
+                                                final n = int.tryParse(val.trim());
+                                                if (n != null) {
+                                                  final clamped = n.clamp(0, 999);
+                                                  setDialogState(() {
+                                                    endMin = clamped;
+                                                    activeColumn = 1;
+                                                  });
+                                                  if (endMinController.hasClients &&
+                                                      endMinController.selectedItem != clamped) {
+                                                    endMinController.jumpToItem(clamped);
+                                                  }
                                                 }
-                                              }
-                                            },
+                                              },
+                                            ),
                                           ),
                                         ),
-                                        const SizedBox(width: 2),
+                                        const SizedBox(width: 4),
                                         Text(
                                           'min',
                                           style: TextStyle(
-                                            fontSize: 11.5,
+                                            fontSize: 12.5,
                                             fontWeight: FontWeight.w600,
                                             color: activeColumn == 1
                                                 ? amberColor
                                                 : (isDark ? Colors.grey[400] : Colors.grey[600]),
                                           ),
                                         ),
-                                        const SizedBox(width: 2),
+                                        const SizedBox(width: 3),
                                         Icon(
                                           Icons.edit_outlined,
-                                          size: 10,
+                                          size: 13,
                                           color: activeColumn == 1
-                                              ? amberColor.withValues(alpha: 0.8)
-                                              : (isDark ? Colors.white30 : Colors.black26),
+                                              ? amberColor.withValues(alpha: 0.9)
+                                              : (isDark ? Colors.white38 : Colors.black38),
                                         ),
                                       ],
                                     ),
