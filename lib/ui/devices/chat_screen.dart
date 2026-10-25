@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/utils/app_feedback.dart';
@@ -338,15 +339,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     final titleLower = (msg.title ?? '').toLowerCase();
     final textLower = msg.text.toLowerCase();
     final cmdLower = (msg.command ?? '').toLowerCase();
-    final isCheckMode = titleLower.contains('check mode') ||
+    final isCheckMode = !isClickable && (titleLower.contains('check mode') ||
         cmdLower.contains('check mode') ||
         cmdLower.contains('check_mode') ||
         (msg.type != null && msg.type!.toUpperCase() == 'CHECK_MODE') ||
-        textLower.contains('check mode') ||
+        (titleLower.isEmpty && (textLower.trim() == 'check mode' || textLower.trim().startsWith('check mode:'))) ||
         (data.isNotEmpty && data.values.every((v) {
           final s = (v is Map ? v['value'] : v)?.toString().toLowerCase().trim() ?? '';
           return s.contains('on/off') || s.contains('rtc') || s.contains('cyclic') || s.contains('cdt') || s.contains('pulse');
-        }));
+        })));
     final isTimingOrRtc = !isCheckMode && ((msg.type != null && msg.type!.toUpperCase() == 'TIME') ||
         msg.command == '/time' ||
         titleLower.contains('on-off') ||
@@ -602,15 +603,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 displayLabel = 'Set Timing ${key.toLowerCase().replaceAll('timing', '').replaceAll('_', ' ').trim()}';
               } else if (isTime && !formattedLabel.toLowerCase().startsWith('set ') && formattedLabel.toLowerCase().contains('timing')) {
                 displayLabel = 'Set $formattedLabel';
+              } else if (relayNames.containsKey(key.trim())) {
+                displayLabel = relayNames[key.trim()]!;
+              } else if (relayNames.containsKey(key.toLowerCase().replaceAll('relay', '').replaceAll('_', '').trim())) {
+                displayLabel = relayNames[key.toLowerCase().replaceAll('relay', '').replaceAll('_', '').trim()]!;
               } else if (isText && valStr.trim().isNotEmpty && int.tryParse(valStr.trim()) == null) {
                 displayLabel = valStr.trim();
                 if (int.tryParse(key.trim()) != null) {
                   provider.setRelayName(activeDevice.id, key.trim(), valStr.trim());
                 }
-              } else if (relayNames.containsKey(key.trim())) {
-                displayLabel = relayNames[key.trim()]!;
-              } else if (relayNames.containsKey(key.toLowerCase().replaceAll('relay', '').replaceAll('_', '').trim())) {
-                displayLabel = relayNames[key.toLowerCase().replaceAll('relay', '').replaceAll('_', '').trim()]!;
               } else if (rawItem is Map && (rawItem['label'] != null || rawItem['title'] != null || rawItem['name'] != null)) {
                 displayLabel = (rawItem['label'] ?? rawItem['title'] ?? rawItem['name']).toString();
               } else {
@@ -627,13 +628,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 valColor = isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626);
               }
 
-              final canEditThisRow = !isCheckMode && msg.isEditable && activeDevice.isOwner && !isReadOnly && isLive;
               final isMode = isCheckMode || (!isClickable &&
                   (key.toLowerCase() == 'mode' ||
                    key.toLowerCase() == 'relay_mode' ||
                    (msg.command == '/mode') ||
                    (msg.type != null && msg.type!.toUpperCase() == 'MODE') ||
                    (rangeStr != null && (rangeStr.toLowerCase().contains('rtc') || rangeStr.toLowerCase().contains('cyclic')))));
+
+              final canEditThisRow = !isCheckMode && (isText || (!isReadOnly && (msg.isEditable || activeDevice.isOwner || isNumeric || isCDT || isTime || isCyclic || isMode)));
+              final canTapThisRow = isClickable || canEditThisRow;
 
               final modeNames = ['On/Off', 'RTC', 'Cyclic', 'CDT', 'Pulse'];
               String modeDisplayStr = valStr;
@@ -659,16 +662,25 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               return Material(
                 color: Colors.transparent,
                 child: InkWell(
-                  onTap: canEditThisRow
+                  onTap: canTapThisRow
                       ? () {
                           if (isClickable) {
-                            final actionCmd = (rawItem is Map && (rawItem['command'] != null || rawItem['message'] != null || rawItem['action'] != null))
-                                ? (rawItem['command'] ?? rawItem['message'] ?? rawItem['action']).toString()
-                                : ((valStr.trim().isNotEmpty && valStr.trim() != displayLabel && int.tryParse(valStr.trim()) == null)
-                                    ? valStr.trim()
-                                    : (key.trim().isNotEmpty && int.tryParse(key.trim()) == null
-                                        ? key.trim()
-                                        : displayLabel));
+                            String actionCmd = '';
+                            if (rawItem is Map && (rawItem['command'] != null || rawItem['message'] != null || rawItem['action'] != null)) {
+                              actionCmd = (rawItem['command'] ?? rawItem['message'] ?? rawItem['action']).toString().trim();
+                            } else if (valStr.trim().isNotEmpty && valStr.trim() != displayLabel && int.tryParse(valStr.trim()) == null) {
+                              actionCmd = valStr.trim();
+                            } else if (rawItem is String && rawItem.trim().isNotEmpty) {
+                              actionCmd = rawItem.trim();
+                            } else if (key.trim().isNotEmpty && int.tryParse(key.trim()) == null) {
+                              actionCmd = key.trim();
+                            } else {
+                              actionCmd = displayLabel.trim();
+                            }
+
+                            if (!actionCmd.startsWith('/') && !actionCmd.startsWith('{')) {
+                              actionCmd = '/${actionCmd.toLowerCase().replaceAll(' ', '_')}';
+                            }
                             _sendMessage(actionCmd, displayLabel);
                           } else if (isMode) {
                             _showModeSelectionDialog(
@@ -1340,6 +1352,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                             ),
                           ),
                           child: Text(
+                    
                             'Cancel',
                             style: TextStyle(
                               color: isDark ? Colors.grey[300] : Colors.grey[700],
@@ -1579,10 +1592,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Top Cards (START MIN & END MIN with direct typing)
+                    // Top Cards (ON MIN & OFF MIN with direct typing)
                     Row(
                       children: [
-                        // Start Min Card
+                        // ON Min Card
                         Expanded(
                           child: InkWell(
                             borderRadius: BorderRadius.circular(8),
@@ -1599,10 +1612,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                               decoration: BoxDecoration(
                                 color: activeColumn == 0
                                     ? (isDark
-                                        ? amberColor.withValues(alpha: 0.12)
+                                        ? amberColor.withValues(alpha: 0.10)
                                         : Colors.amber.shade50)
                                     : (isDark
-                                        ? Colors.white.withValues(alpha: 0.04)
+                                        ? const Color(0xFF16202A)
                                         : Colors.grey[100]),
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
@@ -1618,19 +1631,21 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       Icon(
-                                        Icons.access_time_rounded,
-                                        size: 13,
+                                        activeColumn == 0
+                                            ? Icons.radio_button_checked
+                                            : Icons.radio_button_off,
+                                        size: 14,
                                         color: activeColumn == 0
                                             ? amberColor
                                             : (isDark ? Colors.grey[400] : Colors.grey[600]),
                                       ),
-                                      const SizedBox(width: 4),
+                                      const SizedBox(width: 5),
                                       Text(
-                                        'START MIN',
+                                        'ON MIN',
                                         style: TextStyle(
-                                          fontSize: 10.5,
+                                          fontSize: 11,
                                           fontWeight: FontWeight.bold,
-                                          letterSpacing: 0.4,
+                                          letterSpacing: 0.5,
                                           color: activeColumn == 0
                                               ? amberColor
                                               : (isDark ? Colors.grey[400] : Colors.grey[600]),
@@ -1639,91 +1654,78 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                     ],
                                   ),
                                   const SizedBox(height: 8),
-                                  FittedBox(
-                                    fit: BoxFit.scaleDown,
+                                  Container(
+                                    height: 38,
+                                    margin: const EdgeInsets.symmetric(horizontal: 6),
+                                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                                    decoration: BoxDecoration(
+                                      color: isDark
+                                          ? const Color(0xFF101720)
+                                          : Colors.white,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: isDark ? Colors.white12 : Colors.black12,
+                                      ),
+                                    ),
                                     child: Row(
                                       mainAxisAlignment: MainAxisAlignment.center,
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        // Dedicated square input box for manual typing
-                                        Container(
-                                          height: 44,
-                                          constraints: const BoxConstraints(minWidth: 54),
-                                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                                          decoration: BoxDecoration(
-                                            color: isDark
-                                                ? const Color(0xFF1E293B)
-                                                : Colors.white,
-                                            borderRadius: BorderRadius.circular(6),
-                                            border: Border.all(
-                                              color: activeColumn == 0
-                                                  ? amberColor
-                                                  : (isDark ? Colors.white24 : Colors.black26),
-                                              width: activeColumn == 0 ? 1.8 : 1.2,
+                                        SizedBox(
+                                          width: 48,
+                                          child: TextField(
+                                            controller: startTextController,
+                                            focusNode: startFocusNode,
+                                            keyboardType: TextInputType.number,
+                                            textAlign: TextAlign.center,
+                                            inputFormatters: [
+                                              FilteringTextInputFormatter.digitsOnly,
+                                              LengthLimitingTextInputFormatter(3),
+                                            ],
+                                            style: TextStyle(
+                                              fontFamily: 'monospace',
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
+                                              color: isDark ? Colors.white : Colors.black87,
                                             ),
-                                          ),
-                                          alignment: Alignment.center,
-                                          child: IntrinsicWidth(
-                                            child: TextField(
-                                              controller: startTextController,
-                                              focusNode: startFocusNode,
-                                              keyboardType: TextInputType.number,
-                                              textAlign: TextAlign.center,
-                                              style: TextStyle(
-                                                fontFamily: 'monospace',
-                                                fontSize: 20,
-                                                fontWeight: FontWeight.bold,
-                                                color: activeColumn == 0
-                                                    ? (isDark ? Colors.white : Colors.black87)
-                                                    : (isDark ? Colors.grey[300] : Colors.grey[700]),
-                                              ),
-                                              decoration: const InputDecoration(
-                                                isDense: true,
-                                                border: InputBorder.none,
-                                                contentPadding: EdgeInsets.zero,
-                                              ),
-                                              onTap: () {
-                                                setDialogState(() => activeColumn = 0);
-                                                startTextController.selection = TextSelection(
-                                                  baseOffset: 0,
-                                                  extentOffset: startTextController.text.length,
-                                                );
-                                              },
-                                              onChanged: (val) {
-                                                final n = int.tryParse(val.trim());
-                                                if (n != null) {
-                                                  final clamped = n.clamp(0, 999);
-                                                  setDialogState(() {
-                                                    startMin = clamped;
-                                                    activeColumn = 0;
-                                                  });
-                                                  if (startMinController.hasClients &&
-                                                      startMinController.selectedItem != clamped) {
-                                                    startMinController.jumpToItem(clamped);
-                                                  }
+                                            decoration: const InputDecoration(
+                                              isDense: true,
+                                              border: InputBorder.none,
+                                              contentPadding: EdgeInsets.zero,
+                                            ),
+                                            onTap: () {
+                                              setDialogState(() => activeColumn = 0);
+                                              startTextController.selection = TextSelection(
+                                                baseOffset: 0,
+                                                extentOffset: startTextController.text.length,
+                                              );
+                                            },
+                                            onChanged: (val) {
+                                              final trimmed = val.trim();
+                                              if (trimmed.isEmpty) return;
+                                              final n = int.tryParse(trimmed);
+                                              if (n != null) {
+                                                final clamped = n.clamp(0, 999);
+                                                setDialogState(() {
+                                                  startMin = clamped;
+                                                  activeColumn = 0;
+                                                });
+                                                if (startMinController.hasClients &&
+                                                    startMinController.selectedItem != clamped) {
+                                                  startMinController.jumpToItem(clamped);
                                                 }
-                                              },
-                                            ),
+                                              }
+                                            },
                                           ),
                                         ),
                                         const SizedBox(width: 4),
                                         Text(
                                           'min',
                                           style: TextStyle(
-                                            fontSize: 12.5,
-                                            fontWeight: FontWeight.w600,
-                                            color: activeColumn == 0
-                                                ? amberColor
-                                                : (isDark ? Colors.grey[400] : Colors.grey[600]),
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w500,
+                                            color: isDark ? Colors.grey[400] : Colors.grey[600],
                                           ),
-                                        ),
-                                        const SizedBox(width: 3),
-                                        Icon(
-                                          Icons.edit_outlined,
-                                          size: 13,
-                                          color: activeColumn == 0
-                                              ? amberColor.withValues(alpha: 0.9)
-                                              : (isDark ? Colors.white38 : Colors.black38),
                                         ),
                                       ],
                                     ),
@@ -1734,7 +1736,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        // End Min Card
+                        // OFF Min Card
                         Expanded(
                           child: InkWell(
                             borderRadius: BorderRadius.circular(8),
@@ -1751,10 +1753,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                               decoration: BoxDecoration(
                                 color: activeColumn == 1
                                     ? (isDark
-                                        ? amberColor.withValues(alpha: 0.12)
+                                        ? amberColor.withValues(alpha: 0.10)
                                         : Colors.amber.shade50)
                                     : (isDark
-                                        ? Colors.white.withValues(alpha: 0.04)
+                                        ? const Color(0xFF16202A)
                                         : Colors.grey[100]),
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
@@ -1770,19 +1772,21 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       Icon(
-                                        Icons.access_time_rounded,
-                                        size: 13,
+                                        activeColumn == 1
+                                            ? Icons.radio_button_checked
+                                            : Icons.radio_button_off,
+                                        size: 14,
                                         color: activeColumn == 1
                                             ? amberColor
                                             : (isDark ? Colors.grey[400] : Colors.grey[600]),
                                       ),
-                                      const SizedBox(width: 4),
+                                      const SizedBox(width: 5),
                                       Text(
-                                        'END MIN',
+                                        'OFF MIN',
                                         style: TextStyle(
-                                          fontSize: 10.5,
+                                          fontSize: 11,
                                           fontWeight: FontWeight.bold,
-                                          letterSpacing: 0.4,
+                                          letterSpacing: 0.5,
                                           color: activeColumn == 1
                                               ? amberColor
                                               : (isDark ? Colors.grey[400] : Colors.grey[600]),
@@ -1791,91 +1795,78 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                     ],
                                   ),
                                   const SizedBox(height: 8),
-                                  FittedBox(
-                                    fit: BoxFit.scaleDown,
+                                  Container(
+                                    height: 38,
+                                    margin: const EdgeInsets.symmetric(horizontal: 6),
+                                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                                    decoration: BoxDecoration(
+                                      color: isDark
+                                          ? const Color(0xFF101720)
+                                          : Colors.white,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: isDark ? Colors.white12 : Colors.black12,
+                                      ),
+                                    ),
                                     child: Row(
                                       mainAxisAlignment: MainAxisAlignment.center,
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        // Dedicated square input box for manual typing
-                                        Container(
-                                          height: 44,
-                                          constraints: const BoxConstraints(minWidth: 54),
-                                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                                          decoration: BoxDecoration(
-                                            color: isDark
-                                                ? const Color(0xFF1E293B)
-                                                : Colors.white,
-                                            borderRadius: BorderRadius.circular(6),
-                                            border: Border.all(
-                                              color: activeColumn == 1
-                                                  ? amberColor
-                                                  : (isDark ? Colors.white24 : Colors.black26),
-                                              width: activeColumn == 1 ? 1.8 : 1.2,
+                                        SizedBox(
+                                          width: 48,
+                                          child: TextField(
+                                            controller: endTextController,
+                                            focusNode: endFocusNode,
+                                            keyboardType: TextInputType.number,
+                                            textAlign: TextAlign.center,
+                                            inputFormatters: [
+                                              FilteringTextInputFormatter.digitsOnly,
+                                              LengthLimitingTextInputFormatter(3),
+                                            ],
+                                            style: TextStyle(
+                                              fontFamily: 'monospace',
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
+                                              color: isDark ? Colors.white : Colors.black87,
                                             ),
-                                          ),
-                                          alignment: Alignment.center,
-                                          child: IntrinsicWidth(
-                                            child: TextField(
-                                              controller: endTextController,
-                                              focusNode: endFocusNode,
-                                              keyboardType: TextInputType.number,
-                                              textAlign: TextAlign.center,
-                                              style: TextStyle(
-                                                fontFamily: 'monospace',
-                                                fontSize: 20,
-                                                fontWeight: FontWeight.bold,
-                                                color: activeColumn == 1
-                                                  ? (isDark ? Colors.white : Colors.black87)
-                                                  : (isDark ? Colors.grey[300] : Colors.grey[700]),
-                                              ),
-                                              decoration: const InputDecoration(
-                                                isDense: true,
-                                                border: InputBorder.none,
-                                                contentPadding: EdgeInsets.zero,
-                                              ),
-                                              onTap: () {
-                                                setDialogState(() => activeColumn = 1);
-                                                endTextController.selection = TextSelection(
-                                                  baseOffset: 0,
-                                                  extentOffset: endTextController.text.length,
-                                                );
-                                              },
-                                              onChanged: (val) {
-                                                final n = int.tryParse(val.trim());
-                                                if (n != null) {
-                                                  final clamped = n.clamp(0, 999);
-                                                  setDialogState(() {
-                                                    endMin = clamped;
-                                                    activeColumn = 1;
-                                                  });
-                                                  if (endMinController.hasClients &&
-                                                      endMinController.selectedItem != clamped) {
-                                                    endMinController.jumpToItem(clamped);
-                                                  }
+                                            decoration: const InputDecoration(
+                                              isDense: true,
+                                              border: InputBorder.none,
+                                              contentPadding: EdgeInsets.zero,
+                                            ),
+                                            onTap: () {
+                                              setDialogState(() => activeColumn = 1);
+                                              endTextController.selection = TextSelection(
+                                                baseOffset: 0,
+                                                extentOffset: endTextController.text.length,
+                                              );
+                                            },
+                                            onChanged: (val) {
+                                              final trimmed = val.trim();
+                                              if (trimmed.isEmpty) return;
+                                              final n = int.tryParse(trimmed);
+                                              if (n != null) {
+                                                final clamped = n.clamp(0, 999);
+                                                setDialogState(() {
+                                                  endMin = clamped;
+                                                  activeColumn = 1;
+                                                });
+                                                if (endMinController.hasClients &&
+                                                    endMinController.selectedItem != clamped) {
+                                                  endMinController.jumpToItem(clamped);
                                                 }
-                                              },
-                                            ),
+                                              }
+                                            },
                                           ),
                                         ),
                                         const SizedBox(width: 4),
                                         Text(
                                           'min',
                                           style: TextStyle(
-                                            fontSize: 12.5,
-                                            fontWeight: FontWeight.w600,
-                                            color: activeColumn == 1
-                                                ? amberColor
-                                                : (isDark ? Colors.grey[400] : Colors.grey[600]),
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w500,
+                                            color: isDark ? Colors.grey[400] : Colors.grey[600],
                                           ),
-                                        ),
-                                        const SizedBox(width: 3),
-                                        Icon(
-                                          Icons.edit_outlined,
-                                          size: 13,
-                                          color: activeColumn == 1
-                                              ? amberColor.withValues(alpha: 0.9)
-                                              : (isDark ? Colors.white38 : Colors.black38),
                                         ),
                                       ],
                                     ),
@@ -1903,7 +1894,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       child: Row(
                         children: [
                           buildWheelColumn(
-                            title: 'START (MIN)',
+                            title: 'ON (MIN)',
                             itemCount: 1000,
                             controller: startMinController,
                             selectedValue: startMin,
@@ -1930,7 +1921,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                             ),
                           ),
                           buildWheelColumn(
-                            title: 'END (MIN)',
+                            title: 'OFF (MIN)',
                             itemCount: 1000,
                             controller: endMinController,
                             selectedValue: endMin,
@@ -2637,10 +2628,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         String displayItemLabel;
         if (msg != null && msg.title != null && msg.title!.trim().isNotEmpty && !msg.title!.trim().startsWith('Device ') && !isText) {
           displayItemLabel = msg.title!.trim();
-        } else if (isText && strVal.trim().isNotEmpty && int.tryParse(strVal.trim()) == null) {
-          displayItemLabel = strVal.trim();
         } else if (relayNames.containsKey(key.trim())) {
           displayItemLabel = relayNames[key.trim()]!;
+        } else if (relayNames.containsKey(key.toLowerCase().replaceAll('relay', '').replaceAll('_', '').trim())) {
+          displayItemLabel = relayNames[key.toLowerCase().replaceAll('relay', '').replaceAll('_', '').trim()]!;
+        } else if (isText && strVal.trim().isNotEmpty && int.tryParse(strVal.trim()) == null) {
+          displayItemLabel = strVal.trim();
         } else if (rawValue is Map && (rawValue['label'] != null || rawValue['title'] != null || rawValue['name'] != null)) {
           displayItemLabel = (rawValue['label'] ?? rawValue['title'] ?? rawValue['name']).toString();
         } else {
@@ -3554,107 +3547,111 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       isScrollControlled: false,
       backgroundColor: Colors.transparent,
       builder: (bottomSheetContext) {
-        final theme = Theme.of(bottomSheetContext);
-        final isDark = theme.brightness == Brightness.dark;
-        final deviceCommands = provider.getDeviceCommands(widget.device.id);
-        final customCommands = provider.getCustomCommands(widget.device.id);
+        return Consumer<DeviceProvider>(
+          builder: (context, prov, child) {
+            final theme = Theme.of(bottomSheetContext);
+            final isDark = theme.brightness == Brightness.dark;
+            final deviceCommands = prov.getDeviceCommands(widget.device.id);
+            final customCommands = prov.getCustomCommands(widget.device.id);
 
-        return Container(
-          margin: const EdgeInsets.only(left: 12, right: 12, bottom: 16),
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1E2630) : Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.12),
-                blurRadius: 18,
-                offset: const Offset(0, -2),
-              ),
-            ],
-          ),
-          child: SafeArea(
-            top: false,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Minimal Header
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 14, 18, 10),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.bolt_rounded,
-                        color: Color(0xFF00A884),
-                        size: 20,
-                      ),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'Quick Commands',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
+            return Container(
+              margin: const EdgeInsets.only(left: 12, right: 12, bottom: 16),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E2630) : Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.12),
+                    blurRadius: 18,
+                    offset: const Offset(0, -2),
                   ),
-                ),
-                const Divider(height: 1, thickness: 0.6),
-                // Compact list area
-                Flexible(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // 1. Device Commands (labels only, no command strings)
-                        ...deviceCommands.map((command) {
-                          return _buildMinimalCommandTile(
-                            context: bottomSheetContext,
-                            command: command,
-                            isCustom: false,
-                            isDark: isDark,
-                            onTap: () {
-                              Navigator.pop(bottomSheetContext);
-                              _sendMessage(command.message, command.label);
-                            },
-                          );
-                        }),
-                        // 2. Custom Buttons (at the end)
-                        ...customCommands.map((command) {
-                          return _buildMinimalCommandTile(
-                            context: bottomSheetContext,
-                            command: command,
-                            isCustom: true,
-                            isDark: isDark,
-                            onTap: () {
-                              Navigator.pop(bottomSheetContext);
-                              _sendMessage(command.message, command.label);
-                            },
-                            onEdit: () {
-                              Navigator.pop(bottomSheetContext);
-                              _showEditCommandDialog(provider, command);
-                            },
-                          );
-                        }),
-                        if (deviceCommands.isEmpty && customCommands.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 18),
-                            child: Text(
-                              'No commands available',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: isDark ? Colors.grey[500] : Colors.grey[400],
-                                fontStyle: FontStyle.italic,
-                              ),
+                ],
+              ),
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Minimal Header
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(18, 14, 18, 10),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.bolt_rounded,
+                            color: Color(0xFF00A884),
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Quick Commands',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
+                    const Divider(height: 1, thickness: 0.6),
+                    // Compact list area
+                    Flexible(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // 1. Device Commands (labels only, no command strings)
+                            ...deviceCommands.map((command) {
+                              return _buildMinimalCommandTile(
+                                context: bottomSheetContext,
+                                command: command,
+                                isCustom: false,
+                                isDark: isDark,
+                                onTap: () {
+                                  Navigator.pop(bottomSheetContext);
+                                  _sendMessage(command.message, command.label);
+                                },
+                              );
+                            }),
+                            // 2. Custom Buttons (at the end)
+                            ...customCommands.map((command) {
+                              return _buildMinimalCommandTile(
+                                context: bottomSheetContext,
+                                command: command,
+                                isCustom: true,
+                                isDark: isDark,
+                                onTap: () {
+                                  Navigator.pop(bottomSheetContext);
+                                  _sendMessage(command.message, command.label);
+                                },
+                                onEdit: () {
+                                  Navigator.pop(bottomSheetContext);
+                                  _showEditCommandDialog(prov, command);
+                                },
+                              );
+                            }),
+                            if (deviceCommands.isEmpty && customCommands.isEmpty)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 18),
+                                child: Text(
+                                  'No commands available',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: isDark ? Colors.grey[500] : Colors.grey[400],
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );

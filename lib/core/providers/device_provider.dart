@@ -65,8 +65,76 @@ class DeviceProvider extends ChangeNotifier {
     if (!_deviceRelayNames.containsKey(deviceId)) {
       _deviceRelayNames[deviceId] = {};
     }
-    _deviceRelayNames[deviceId]![relayKey.trim()] = relayName.trim();
+    final trimmedKey = relayKey.trim();
+    final trimmedName = relayName.trim();
+    _deviceRelayNames[deviceId]![trimmedKey] = trimmedName;
+
+    // Normalize keys: if key contains digits (e.g. 1 or relay1 or relay_1), map all variations
+    final digitMatch = RegExp(r'\d+').firstMatch(trimmedKey);
+    if (digitMatch != null) {
+      final d = digitMatch.group(0)!;
+      _deviceRelayNames[deviceId]![d] = trimmedName;
+      _deviceRelayNames[deviceId]!['relay$d'] = trimmedName;
+      _deviceRelayNames[deviceId]!['relay_$d'] = trimmedName;
+      _deviceRelayNames[deviceId]!['relay $d'] = trimmedName;
+    }
+
     _saveRelayNamesToPrefs(deviceId);
+
+    // Update existing chat messages' rawData immediately so chat bubbles reflect the new name instantly
+    if (_messages.containsKey(deviceId)) {
+      for (int i = 0; i < _messages[deviceId]!.length; i++) {
+        final m = _messages[deviceId]![i];
+        if (!m.isUser && m.rawData != null) {
+          bool updated = false;
+          final updatedData = Map<String, dynamic>.from(m.rawData!);
+          final checkKeys = [
+            trimmedKey,
+            if (digitMatch != null) ...[digitMatch.group(0)!, 'relay${digitMatch.group(0)!}', 'relay_${digitMatch.group(0)!}']
+          ];
+          for (final checkKey in checkKeys) {
+            if (updatedData.containsKey(checkKey)) {
+              if (updatedData[checkKey] is Map) {
+                final nested = Map<String, dynamic>.from(updatedData[checkKey] as Map);
+                nested['value'] = trimmedName;
+                updatedData[checkKey] = nested;
+              } else {
+                updatedData[checkKey] = trimmedName;
+              }
+              updated = true;
+            }
+          }
+          if (updated) {
+            _messages[deviceId]![i] = m.copyWith(rawData: updatedData);
+          }
+        }
+      }
+    }
+
+    // Update _deviceQuickCommands immediately with the new relay name
+    if (_deviceQuickCommands.containsKey(deviceId) && _deviceQuickCommands[deviceId] != null) {
+      final currentCmds = _deviceQuickCommands[deviceId]!;
+      final List<QuickCommandModel> updatedCmds = [];
+      for (final cmd in currentCmds) {
+        String newLabel = cmd.label;
+        if (digitMatch != null) {
+          final d = digitMatch.group(0)!;
+          final pattern = RegExp(r'\b(relay\s*_?' + d + r'|' + d + r')\b', caseSensitive: false);
+          if (pattern.hasMatch(newLabel)) {
+            newLabel = newLabel.replaceAll(pattern, trimmedName);
+          } else if (pattern.hasMatch(cmd.message)) {
+            final msgExp = RegExp(r'relay\s*_?' + d, caseSensitive: false);
+            newLabel = newLabel.replaceAll(msgExp, trimmedName);
+          }
+        } else if (trimmedKey.isNotEmpty && newLabel.toLowerCase().contains(trimmedKey.toLowerCase())) {
+          newLabel = newLabel.replaceAll(RegExp(RegExp.escape(trimmedKey), caseSensitive: false), trimmedName);
+        }
+        updatedCmds.add(QuickCommandModel(label: newLabel, message: cmd.message));
+      }
+      _deviceQuickCommands[deviceId] = updatedCmds;
+      _saveDeviceCommandsToPrefs(deviceId);
+    }
+
     notifyListeners();
   }
 
@@ -128,25 +196,54 @@ class DeviceProvider extends ChangeNotifier {
   final Map<String, List<QuickCommandModel>> _customQuickCommands = {};
   
   List<QuickCommandModel> getDeviceCommands(String deviceId) {
+    List<QuickCommandModel> commands = [];
     if (_deviceQuickCommands.containsKey(deviceId) && _deviceQuickCommands[deviceId]!.isNotEmpty) {
-      return _deviceQuickCommands[deviceId]!;
-    }
-    final details = _deviceDetails[deviceId];
-    if (details != null) {
-      final cmds = details['availableCommands'] ??
-          details['additionalCommands'] ??
-          details['commands'] ??
-          details['quickCommands'] ??
-          details['quick_commands'];
-      if (cmds != null) {
-        final parsed = _parseQuickCommands(cmds);
-        if (parsed.isNotEmpty) {
-          _deviceQuickCommands[deviceId] = parsed;
-          return parsed;
+      commands = _deviceQuickCommands[deviceId]!;
+    } else {
+      final details = _deviceDetails[deviceId];
+      if (details != null) {
+        final cmds = details['availableCommands'] ??
+            details['additionalCommands'] ??
+            details['commands'] ??
+            details['quickCommands'] ??
+            details['quick_commands'];
+        if (cmds != null) {
+          final parsed = _parseQuickCommands(cmds);
+          if (parsed.isNotEmpty) {
+            _deviceQuickCommands[deviceId] = parsed;
+            commands = parsed;
+          }
         }
       }
     }
-    return _deviceQuickCommands[deviceId] ?? [];
+    
+    // Dynamically apply known relay names to command labels if available
+    final relayNames = _deviceRelayNames[deviceId];
+    if (relayNames != null && relayNames.isNotEmpty && commands.isNotEmpty) {
+      return commands.map((cmd) {
+        String updatedLabel = cmd.label;
+        relayNames.forEach((key, name) {
+          if (name.isNotEmpty) {
+            final digitMatch = RegExp(r'\d+').firstMatch(key);
+            if (digitMatch != null) {
+              final d = digitMatch.group(0)!;
+              final pattern = RegExp(r'\b(relay\s*_?' + d + r'|' + d + r')\b', caseSensitive: false);
+              if (pattern.hasMatch(updatedLabel)) {
+                updatedLabel = updatedLabel.replaceAll(pattern, name);
+              } else if (pattern.hasMatch(cmd.message)) {
+                final msgExp = RegExp(r'relay\s*_?' + d, caseSensitive: false);
+                updatedLabel = updatedLabel.replaceAll(msgExp, name);
+              }
+            } else if (key.isNotEmpty && updatedLabel.toLowerCase().contains(key.toLowerCase())) {
+              updatedLabel = updatedLabel.replaceAll(RegExp(RegExp.escape(key), caseSensitive: false), name);
+            }
+          }
+        });
+        return QuickCommandModel(label: updatedLabel, message: cmd.message);
+      }).toList();
+    }
+
+    return commands;
   }
 
   static List<QuickCommandModel> _parseQuickCommands(dynamic rawCmds) {
@@ -931,7 +1028,7 @@ class DeviceProvider extends ChangeNotifier {
               notifyListeners();
 
               _heartbeatTimer?.cancel();
-              _heartbeatTimer = Timer(const Duration(seconds: 10), () async {
+              _heartbeatTimer = Timer(const Duration(seconds: 45), () async {
                 _deviceConnectionStatus[deviceId] = 'offline';
                 notifyListeners();
                 await fetchDeviceById(deviceId);
@@ -951,7 +1048,8 @@ class DeviceProvider extends ChangeNotifier {
                   respCmd == '/write_register' ||
                   respCmd == 'write_register' ||
                   respCmd == '/write_time' ||
-                  respCmd == '/time';
+                  respCmd == '/time' ||
+                  (_lastSentCommand[deviceId]?.startsWith('/write') == true);
               if (isWriteCommand && isSuccess) {
                 final pending = _pendingRegisterWrites[deviceId];
                 if (pending != null) {
@@ -986,6 +1084,15 @@ class DeviceProvider extends ChangeNotifier {
                   _pendingRegisterWrites.remove(deviceId);
                   notifyListeners();
                 }
+
+                // Automatically sync fresh commands and state from Backend
+                fetchDeviceById(deviceId);
+                fetchDeviceDetails(deviceId);
+                if (_webSocket != null && _webSocket!.readyState == WebSocket.open) {
+                  try {
+                    _webSocket!.add(jsonEncode({'command': '/status'}));
+                  } catch (_) {}
+                }
               }
 
               // If the response payload contains a data object (such as /about, /holding, etc.),
@@ -1019,7 +1126,7 @@ class DeviceProvider extends ChangeNotifier {
               notifyListeners();
 
               _heartbeatTimer?.cancel();
-              _heartbeatTimer = Timer(const Duration(seconds: 10), () async {
+              _heartbeatTimer = Timer(const Duration(seconds: 45), () async {
                 _deviceConnectionStatus[deviceId] = 'offline';
                 notifyListeners();
                 await fetchDeviceById(deviceId);
@@ -1037,7 +1144,7 @@ class DeviceProvider extends ChangeNotifier {
               notifyListeners();
               
               _heartbeatTimer?.cancel();
-              _heartbeatTimer = Timer(const Duration(seconds: 10), () async {
+              _heartbeatTimer = Timer(const Duration(seconds: 45), () async {
                 _deviceConnectionStatus[deviceId] = 'offline';
                 notifyListeners();
                 await fetchDeviceById(deviceId);
