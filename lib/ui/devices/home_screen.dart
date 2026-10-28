@@ -330,53 +330,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                 );
                               },
-                              onLongPress: () {
-                                showDialog(
-                                  context: context,
-                                  builder: (context) {
-                                    final isOwner = device.isOwner;
-                                    return AlertDialog(
-                                      title: Text(
-                                        isOwner
-                                            ? 'Delete Device'
-                                            : 'Leave Device',
-                                      ),
-                                      content: Text(
-                                        isOwner
-                                            ? 'Are you sure you want to delete ${device.name}?'
-                                            : 'Are you sure you want to leave ${device.name}?',
-                                      ),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () =>
-                                              Navigator.pop(context),
-                                          child: const Text('Cancel'),
-                                        ),
-                                        TextButton(
-                                          onPressed: () {
-                                            final authProvider =
-                                                Provider.of<AuthProvider>(
-                                                  context,
-                                                  listen: false,
-                                                );
-                                            deviceProvider.deleteDevice(
-                                              device.id,
-                                              userId: authProvider.userId,
-                                            );
-                                            Navigator.pop(context);
-                                          },
-                                          child: Text(
-                                            isOwner ? 'Delete' : 'Leave',
-                                            style: const TextStyle(
-                                              color: Colors.red,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    );
-                                  },
-                                );
-                              },
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 16.0,

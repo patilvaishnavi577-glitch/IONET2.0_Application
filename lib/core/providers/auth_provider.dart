@@ -46,6 +46,7 @@ class AuthProvider extends ChangeNotifier {
     try {
       final response = await http
           .post(url, headers: formattedHeaders, body: bodyString)
+          
           .timeout(_timeoutDuration);
 
       debugPrint('<-- [API RESPONSE] ${response.statusCode} POST $url');
@@ -170,7 +171,6 @@ class AuthProvider extends ChangeNotifier {
         _token = extractedToken;
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('jwt_token', extractedToken);
-
         _email = email.trim(); // Ensure email is set in state
 
         if (profileCompleted != null) {
@@ -188,12 +188,14 @@ class AuthProvider extends ChangeNotifier {
           _isFirstTimeUser = true;
         }
 
+
         _isAuthenticated = true;
         notifyListeners();
         return true;
       }
     } else {
       ErrorHandler.parseHttpResponse(response, defaultErrorMessage: 'Invalid or expired OTP');
+      
     }
     return false;
   }
@@ -244,6 +246,7 @@ class AuthProvider extends ChangeNotifier {
       }
       
       // If profile exists and has a name, they are not a first-time user.
+
       _isFirstTimeUser = (_name == null || _name!.isEmpty);
       await _saveProfileLocally();
       notifyListeners();
@@ -401,7 +404,9 @@ class AuthProvider extends ChangeNotifier {
     await prefs.remove('user_credits');
     await prefs.remove('user_profile_pic');
     await prefs.remove('is_first_time_user');
+  
   }
+
 
   Future<bool> tryRestoreSession() async {
     final prefs = await SharedPreferences.getInstance();

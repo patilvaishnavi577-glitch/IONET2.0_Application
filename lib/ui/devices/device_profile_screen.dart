@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../core/providers/auth_provider.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/utils/app_feedback.dart';
 import '../../data/models/device_model.dart';
@@ -338,6 +339,64 @@ class _DeviceProfileScreenState extends State<DeviceProfileScreen> {
     }
   }
 
+  Future<void> _confirmDeleteDevice(DeviceModel device) async {
+    final isOwner = device.isOwner;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(isOwner ? 'Delete Device' : 'Leave Device'),
+          content: Text(
+            isOwner
+                ? 'Are you sure you want to delete ${device.name}? This action cannot be undone.'
+                : 'Are you sure you want to leave ${device.name}?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: Text(
+                isOwner ? 'Delete' : 'Leave',
+                style: const TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true || !mounted) return;
+
+    setState(() => _isLoading = true);
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+      await deviceProvider.deleteDevice(
+        device.id,
+        userId: authProvider.userId,
+      );
+      if (mounted) {
+        AppFeedback.showSuccess(
+          context,
+          isOwner ? 'Device deleted successfully' : 'Left device successfully',
+        );
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
+    } catch (e) {
+      if (mounted) {
+        AppFeedback.showError(context, e);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
   void _showImageOptions(DeviceModel device) {
     if (!device.isOwner) {
       AppFeedback.showInfo(context, 'Only the owner can upload or remove device images.');
@@ -570,6 +629,34 @@ class _DeviceProfileScreenState extends State<DeviceProfileScreen> {
                               Icons.calendar_today,
                               'Installation Date',
                               installationDate,
+                            ),
+                            const Divider(height: 24),
+                            InkWell(
+                              onTap: () => _confirmDeleteDevice(device),
+                              borderRadius: BorderRadius.circular(8),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 4.0),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.delete_outline,
+                                      color: Colors.redAccent,
+                                      size: 22,
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Text(
+                                        device.isOwner ? 'Delete Device' : 'Leave Device',
+                                        style: const TextStyle(
+                                          color: Colors.redAccent,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ],
                         ),
